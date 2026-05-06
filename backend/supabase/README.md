@@ -3,15 +3,15 @@
 ## 프로젝트
 
 - Supabase 프로젝트는 웹 콘솔에서 생성 완료했다.
-- 앱에는 Supabase URL과 anon key만 공개 환경 변수로 연결한다.
+- 앱에는 Supabase URL과 publishable key만 공개 환경 변수로 연결한다.
 - service role key는 모바일 앱과 웹 앱 환경 변수에 넣지 않는다.
 
 ## 환경 변수
 
-| 앱 | URL | anon key |
+| 앱 | URL | publishable key |
 |---|---|---|
-| 모바일 | `EXPO_PUBLIC_SUPABASE_URL` | `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
-| 웹 | `NEXT_PUBLIC_SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| 모바일 | `EXPO_PUBLIC_SUPABASE_URL` | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+| 웹 | `NEXT_PUBLIC_SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
 
 ## RLS 적용 대상
 

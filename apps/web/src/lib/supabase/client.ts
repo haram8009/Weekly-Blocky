@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getSupabaseEnv } from './env';
 
 export function createBrowserSupabaseClient() {
-  const { url, anonKey } = getSupabaseEnv();
+  const { url, publishableKey } = getSupabaseEnv();
 
-  return createClient(url, anonKey);
+  return createClient(url, publishableKey);
 }

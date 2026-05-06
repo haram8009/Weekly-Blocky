@@ -1,5 +1,5 @@
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export type SupabaseEnvStatus = {
   isConfigured: boolean;
@@ -9,7 +9,7 @@ export type SupabaseEnvStatus = {
 export function getSupabaseEnvStatus(): SupabaseEnvStatus {
   const envEntries: Array<[string, string | undefined]> = [
     ['NEXT_PUBLIC_SUPABASE_URL', supabaseUrl],
-    ['NEXT_PUBLIC_SUPABASE_ANON_KEY', supabaseAnonKey],
+    ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', supabasePublishableKey],
   ];
 
   const missingKeys = envEntries.filter(([, value]) => !value).map(([key]) => key);
@@ -29,6 +29,6 @@ export function getSupabaseEnv() {
 
   return {
     url: supabaseUrl!,
-    anonKey: supabaseAnonKey!,
+    publishableKey: supabasePublishableKey!,
   };
 }

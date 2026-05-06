@@ -1,5 +1,5 @@
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export type MobileSupabaseEnvStatus = {
   isConfigured: boolean;
@@ -9,7 +9,7 @@ export type MobileSupabaseEnvStatus = {
 export function getMobileSupabaseEnvStatus(): MobileSupabaseEnvStatus {
   const envEntries: Array<[string, string | undefined]> = [
     ['EXPO_PUBLIC_SUPABASE_URL', supabaseUrl],
-    ['EXPO_PUBLIC_SUPABASE_ANON_KEY', supabaseAnonKey],
+    ['EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', supabasePublishableKey],
   ];
 
   const missingKeys = envEntries.filter(([, value]) => !value).map(([key]) => key);
@@ -29,6 +29,6 @@ export function getMobileSupabaseEnv() {
 
   return {
     url: supabaseUrl!,
-    anonKey: supabaseAnonKey!,
+    publishableKey: supabasePublishableKey!,
   };
 }

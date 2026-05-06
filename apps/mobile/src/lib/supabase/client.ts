@@ -12,9 +12,9 @@ export function createMobileSupabaseClient() {
     return mobileSupabaseClient;
   }
 
-  const { url, anonKey } = getMobileSupabaseEnv();
+  const { url, publishableKey } = getMobileSupabaseEnv();
 
-  mobileSupabaseClient = createClient(url, anonKey, {
+  mobileSupabaseClient = createClient(url, publishableKey, {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: false,

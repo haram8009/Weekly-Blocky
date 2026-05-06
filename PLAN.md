@@ -146,7 +146,7 @@
 ### 6. Supabase 기반
 
 - [x] Supabase 프로젝트 생성
-- [x] 로컬 환경 변수에 Supabase URL/anon key 연결
+- [x] 로컬 환경 변수에 Supabase URL/publishable key 연결
 - [x] 모바일 Supabase 클라이언트 생성
 - [x] 웹 Supabase 클라이언트 생성
 - [x] Auth 기본 연결 확인
