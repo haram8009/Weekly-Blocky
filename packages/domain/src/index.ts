@@ -125,3 +125,5 @@ export type SyncState = {
   lastError: string | null;
   updatedAt: TimestampString;
 };
+
+export * from './time';

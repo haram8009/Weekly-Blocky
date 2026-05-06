@@ -133,15 +133,15 @@
 
 ### 5. 시간 유틸리티
 
-- [ ] `parseTimeToMinutes` 구현
-- [ ] `formatMinutesToTime` 구현
-- [ ] `isTenMinuteAligned` 구현
-- [ ] `validateTimeRange` 구현
-- [ ] `getWeekStartDate` 구현
-- [ ] `getDatesOfWeek` 구현
-- [ ] `isCapturedWithinEntry` 구현
-- [ ] `24:00` 종료 시각 예외 처리
-- [ ] `00`, `10`, `20`, `30`, `40`, `50` 분 단위 검증
+- [x] `parseTimeToMinutes` 구현
+- [x] `formatMinutesToTime` 구현
+- [x] `isTenMinuteAligned` 구현
+- [x] `validateTimeRange` 구현
+- [x] `getWeekStartDate` 구현
+- [x] `getDatesOfWeek` 구현
+- [x] `isCapturedWithinEntry` 구현
+- [x] `24:00` 종료 시각 예외 처리
+- [x] `00`, `10`, `20`, `30`, `40`, `50` 분 단위 검증
 
 ### 6. Supabase 기반
 
@@ -157,7 +157,7 @@
 - [x] 모바일 앱 첫 화면
 - [x] 데스크톱 웹 로그인 화면
 - [x] 공통 도메인 타입
-- [ ] 시간 유틸리티와 단위 테스트
+- [x] 시간 유틸리티와 단위 테스트
 - [ ] Supabase 연결 설정
 
 ### 검증 기준
@@ -165,7 +165,7 @@
 - [x] 모바일 앱이 로컬에서 실행된다.
 - [x] 웹 앱이 로컬에서 실행된다.
 - [ ] 모바일과 웹에서 같은 `packages/domain` 타입을 import할 수 있다.
-- [ ] 시간 유틸리티 테스트가 통과한다.
+- [x] 시간 유틸리티 테스트가 통과한다.
 - [ ] 환경 변수 누락 시 알아볼 수 있는 오류가 표시된다.
 
 ## M2 데이터와 기록 CRUD
