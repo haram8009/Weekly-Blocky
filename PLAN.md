@@ -119,17 +119,17 @@
 
 ### 4. 공통 도메인 패키지
 
-- [ ] `UserProfile` 타입 정의
-- [ ] `Category` 타입 정의
-- [ ] `TimeEntry` 타입 정의
-- [ ] `Template` 타입 정의
-- [ ] `TemplateEntry` 타입 정의
-- [ ] `WeekReview` 타입 정의
-- [ ] `PhotoReference` 타입 정의
-- [ ] `AppSettings` 타입 정의
-- [ ] `SyncState` 타입 정의
-- [ ] `TimeEntrySource` 타입 정의
-- [ ] 날짜/시간 문자열 타입 alias 정의
+- [x] `UserProfile` 타입 정의
+- [x] `Category` 타입 정의
+- [x] `TimeEntry` 타입 정의
+- [x] `Template` 타입 정의
+- [x] `TemplateEntry` 타입 정의
+- [x] `WeekReview` 타입 정의
+- [x] `PhotoReference` 타입 정의
+- [x] `AppSettings` 타입 정의
+- [x] `SyncState` 타입 정의
+- [x] `TimeEntrySource` 타입 정의
+- [x] 날짜/시간 문자열 타입 alias 정의
 
 ### 5. 시간 유틸리티
 
@@ -156,7 +156,7 @@
 
 - [x] 모바일 앱 첫 화면
 - [x] 데스크톱 웹 로그인 화면
-- [ ] 공통 도메인 타입
+- [x] 공통 도메인 타입
 - [ ] 시간 유틸리티와 단위 테스트
 - [ ] Supabase 연결 설정
 
