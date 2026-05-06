@@ -23,7 +23,8 @@ export default function LoginPage() {
 
         {!envStatus.isConfigured ? (
           <p className={styles.notice}>
-            Supabase 환경 변수가 아직 비어 있습니다. 로그인 연결은 M1-6에서 활성화합니다.
+            Supabase 환경 변수가 아직 비어 있습니다. 앱별 .env 파일에 URL과 anon key를
+            설정해야 합니다.
           </p>
         ) : null}
 

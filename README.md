@@ -59,3 +59,12 @@ corepack pnpm --filter @weekly/web dev
 - `apps/web/.env.example`
 
 실제 `.env` 파일과 로컬 secret은 커밋하지 않는다.
+
+Supabase 프로젝트 값은 앱별 `.env` 파일에 다음 공개 키로 연결한다.
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```

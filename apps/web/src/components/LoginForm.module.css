@@ -43,6 +43,11 @@
   background: #195246;
 }
 
+.form button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .form p {
   margin: 0;
   color: #627168;

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { checkBrowserSupabaseAuthConnection } from '@/lib/supabase/auth';
 import styles from './LoginForm.module.css';
 
 type LoginFormProps = {
@@ -12,8 +12,9 @@ type LoginFormProps = {
 
 export function LoginForm({ isSupabaseConfigured }: LoginFormProps) {
   const [message, setMessage] = useState('이메일 로그인 연결 대기 중');
+  const [isChecking, setIsChecking] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!isSupabaseConfigured) {
@@ -21,8 +22,16 @@ export function LoginForm({ isSupabaseConfigured }: LoginFormProps) {
       return;
     }
 
-    createBrowserSupabaseClient();
-    setMessage('Supabase 클라이언트를 초기화했습니다.');
+    setIsChecking(true);
+    const result = await checkBrowserSupabaseAuthConnection();
+    setIsChecking(false);
+
+    if (!result.isConnected) {
+      setMessage(`Supabase Auth 연결 실패: ${result.errorMessage}`);
+      return;
+    }
+
+    setMessage('Supabase Auth 연결을 확인했습니다.');
   }
 
   return (
@@ -40,7 +49,9 @@ export function LoginForm({ isSupabaseConfigured }: LoginFormProps) {
           type="password"
         />
       </label>
-      <button type="submit">로그인</button>
+      <button disabled={isChecking} type="submit">
+        {isChecking ? '확인 중' : '로그인'}
+      </button>
       <p aria-live="polite">{message}</p>
     </form>
   );
