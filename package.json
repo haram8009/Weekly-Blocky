@@ -1,0 +1,31 @@
+{
+  "name": "weekly",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.18.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --check \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
+    "format:write": "prettier --write \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -b --pretty --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "^4.0.8"
+  }
+}

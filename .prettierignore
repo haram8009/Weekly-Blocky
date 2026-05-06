@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.turbo/
+.vite/
+.next/
+.expo/
+web-build/
+out/
+.vercel/
+*.tsbuildinfo
+pnpm-lock.yaml

@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/sync" },
+    { "path": "./packages/ui" }
+  ]
+}
