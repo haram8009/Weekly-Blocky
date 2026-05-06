@@ -16,6 +16,11 @@
     "lint": "eslint .",
     "format": "prettier --check \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
     "format:write": "prettier --write \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
+    "supabase": "supabase",
+    "supabase:db:push": "supabase db push",
+    "supabase:init": "supabase init",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
     "test": "vitest run --passWithNoTests",
     "typecheck": "corepack pnpm --filter './packages/*' --filter './apps/*' --if-present typecheck"
   },
@@ -24,6 +29,7 @@
     "@types/node": "^24.10.0",
     "eslint": "^9.39.1",
     "prettier": "^3.6.2",
+    "supabase": "^2.98.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3",
     "vitest": "^4.0.8"
