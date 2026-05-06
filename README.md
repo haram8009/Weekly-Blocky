@@ -12,6 +12,8 @@ packages/
   domain/       공통 타입, 시간 계산, 통계, 겹침 처리
   sync/         동기화 유틸리티
   ui/           공유 가능한 최소 UI 토큰
+backend/
+  supabase/     Supabase CLI 설정, migration, storage 설계
 ```
 
 ## 로컬 준비
@@ -20,6 +22,7 @@ packages/
 
 - Node.js 20.19.4 이상
 - pnpm 10 이상
+- Docker Desktop
 
 처음 한 번 실행한다.
 
@@ -49,6 +52,13 @@ corepack pnpm --filter @weekly/mobile start
 
 ```bash
 corepack pnpm --filter @weekly/web dev
+```
+
+로컬 Supabase는 다음 명령으로 실행한다. 자세한 절차는 `backend/README.md`를 본다.
+
+```bash
+corepack pnpm supabase:start
+corepack pnpm supabase:status
 ```
 
 ## 환경 변수

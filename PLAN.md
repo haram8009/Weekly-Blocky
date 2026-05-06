@@ -210,17 +210,17 @@
 
 ### 3. 서버 스키마
 
-- [ ] `user_profiles` 테이블 작성
-- [ ] `categories` 테이블 작성
-- [ ] `time_entries` 테이블 작성
-- [ ] `week_reviews` 테이블 작성
-- [ ] `photo_references` 테이블 작성
-- [ ] `settings` 테이블 작성
-- [ ] `thumbnailStorage` bucket 설계
-- [ ] `user_id` 기반 RLS policy 작성
-- [ ] soft delete용 `deleted_at` 필드 적용
-- [ ] `created_at`, `updated_at` 갱신 방식 정의
-- [ ] 기본 인덱스 작성: 사용자, 날짜, 주 시작일, 카테고리
+- [x] `user_profiles` 테이블 작성
+- [x] `categories` 테이블 작성
+- [x] `time_entries` 테이블 작성
+- [x] `week_reviews` 테이블 작성
+- [x] `photo_references` 테이블 작성
+- [x] `settings` 테이블 작성
+- [x] `thumbnailStorage` bucket 설계
+- [x] `user_id` 기반 RLS policy 작성
+- [x] soft delete용 `deleted_at` 필드 적용
+- [x] `created_at`, `updated_at` 갱신 방식 정의
+- [x] 기본 인덱스 작성: 사용자, 날짜, 주 시작일, 카테고리
 
 ### 4. 기록 저장소 계층
 
