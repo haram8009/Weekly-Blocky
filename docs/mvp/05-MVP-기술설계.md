@@ -15,7 +15,8 @@ Mobile App: React Native + Expo + TypeScript
 Desktop Web: React/Next.js + TypeScript
 Backend: Supabase
 Auth Method: Supabase 이메일/비밀번호 우선
-Mobile Local Cache: Expo SQLite
+MVP Data Write: Supabase-first
+Offline Local Cache: Expo SQLite 후속
 Auth Session: SecureStore
 Photo Access: expo-media-library
 Thumbnail Processing: expo-image-manipulator
@@ -50,7 +51,7 @@ apps/
   web/          Next.js companion web
 packages/
   domain/       공통 타입, 시간 계산, 통계, 겹침 처리
-  sync/         동기화 유틸리티
+  sync/         후속 오프라인 동기화 유틸리티
   ui/           공유 가능한 최소 UI 토큰
 backend/
   supabase/     schema, policies, storage rules
@@ -60,8 +61,7 @@ backend/
 
 ```text
 모바일 앱
-  -> 로컬 DB 저장
-  -> 동기화 큐
+  -> 인증 세션 확인
   -> Supabase DB
   -> 데스크톱 웹 열람
 ```
@@ -132,12 +132,12 @@ backend/
 - 제한된 사진 권한에서는 허용된 사진만 대상으로 한다.
 - 주간 전체 사진을 한 번에 무겁게 스캔하지 않는다.
 
-### SyncService
+### OfflineSyncService
 
 역할:
 
-- 모바일 로컬 변경 큐 관리
-- 서버 동기화
+- 후속 오프라인 로컬 변경 큐 관리
+- 후속 서버 동기화
 - 실패 재시도
 - `updatedAt` 기반 단순 충돌 해결
 
@@ -148,26 +148,31 @@ backend/
 - 인증된 사용자 세션 확인
 - 신규 사용자 기본 프로필 생성
 - 사용자별 기본 설정 생성
-- 생성된 프로필과 설정을 모바일 로컬 DB에 캐시
+- 생성된 프로필과 설정을 서버에서 재조회
 - 재로그인, 앱 재시작, 동시 요청에도 중복 생성되지 않도록 보장
 - 예시 카테고리는 생성 힌트로만 제공하고 사용자 데이터로 자동 저장하지 않음
 
 주의:
 
 - 예시 카테고리는 로컬 개발용 데이터 주입으로 만들지 않는다.
-- 로컬 DB 초기화는 스키마와 캐시 준비까지만 담당한다.
+- 오프라인 로컬 DB 초기화는 후속 범위로 둔다.
 
 ## 6. 상태 관리
 
-### 영속 상태
+### 서버 영속 상태
 
 - categories
 - timeEntries
-- templates
 - weekReviews
-- photoReferences
 - settings
-- syncState
+
+### 모바일 로컬 영속 상태
+
+- authSession
+- photoReferences
+- thumbnailFiles
+- offlineCache(후속)
+- syncState(후속)
 
 ### UI 상태
 
@@ -181,10 +186,10 @@ backend/
 ### 원칙
 
 - 도메인 계산은 `packages/domain`에서 처리한다.
-- 모바일 로컬 DB와 서버 DB 접근은 서비스 계층으로 숨긴다.
+- 모바일과 웹의 서버 DB 접근은 서비스 계층으로 숨긴다.
 - 기본 설정 생성은 인증된 사용자 초기화 서비스에서 처리한다.
-- 카테고리는 사용자가 명시적으로 생성한 뒤에만 로컬 DB와 서버 DB에 저장한다.
-- 사진 원본 경로는 서버 동기화 대상에 넣지 않는다.
+- 카테고리는 사용자가 명시적으로 생성한 뒤에만 서버 DB에 저장한다.
+- 사진 원본 경로는 서버 저장 대상에 넣지 않는다.
 
 ## 7. 시간 처리 설계
 
@@ -272,9 +277,10 @@ photo.capturedAt < entry.endDateTime
 권장 구현:
 
 ```text
-Expo SQLite: 기록, 카테고리, 회고, 사진 참조, 동기화 큐
+Supabase Client: 기록, 카테고리, 회고, 설정 저장
 SecureStore: 인증 세션 또는 민감 토큰
 FileSystem: 생성된 로컬 썸네일 캐시
+Expo SQLite: 오프라인 기록과 동기화 큐 후속
 ```
 
 ### 서버
@@ -321,7 +327,7 @@ Row Level Security: 사용자별 데이터 격리
 
 ### 사용자에게 알려야 할 점
 
-- 시간 기록은 계정 동기화를 위해 서버에 저장된다.
+- 시간 기록은 계정 기반 열람을 위해 서버에 저장된다.
 - 사진 원본은 자동 업로드되지 않는다.
 - 데스크톱 웹에서 사진을 보려면 작은 썸네일 동기화가 필요하다.
 - 사진 권한을 거부해도 기록 기능은 사용할 수 있다.
@@ -351,8 +357,8 @@ Row Level Security: 사용자별 데이터 격리
 4. 기록을 수정한다.
 5. 사진 권한을 허용한다.
 6. 기록 시간대 사진이 표시된다.
-7. 오프라인에서 기록을 수정한다.
-8. 온라인 복구 후 동기화된다.
+7. 네트워크 또는 서버 저장 실패 상태를 확인한다.
+8. 재시도 후 서버 데이터가 갱신된다.
 
 ### 웹 테스트
 
@@ -382,7 +388,7 @@ Row Level Security: 사용자별 데이터 격리
 - 모바일에서 첫 기록 추가 가능
 - 모바일 사진 권한 허용/거부 흐름 정상
 - 사진 원본이 자동 업로드되지 않음
-- 모바일-웹 동기화 정상
+- 모바일-웹 서버 데이터 공유 정상
 - 데스크톱 웹에서 주간 기록 열람 가능
 - CSV 내보내기 정상
 
@@ -397,6 +403,9 @@ MVP 이후 확장 가능성을 고려해 다음을 막지 않는 구조로 만�
 - AI 주간 회고
 - PWA 보조 제공
 - 네이티브 위젯
+- 오프라인 로컬 기록 저장
+- 로컬 변경 동기화 큐
+- 다중 기기 오프라인 충돌 해결
 - 원본 사진 선택 업로드
 
 단, MVP 구현 중에는 후속 확장을 위한 추상화를 과하게 만들지 않는다.
