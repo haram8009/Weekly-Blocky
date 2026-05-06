@@ -87,16 +87,16 @@
 
 ### 1. 모노레포와 개발 환경
 
-- [ ] `apps/mobile` 디렉터리 생성
-- [ ] `apps/web` 디렉터리 생성
-- [ ] `packages/domain` 디렉터리 생성
-- [ ] `packages/sync` 디렉터리 생성
-- [ ] `packages/ui` 디렉터리 생성
-- [ ] 패키지 매니저와 workspace 설정
-- [ ] TypeScript 공통 설정 구성
-- [ ] lint, format, test 명령 정의
-- [ ] 환경 변수 파일 예시 작성
-- [ ] README에 로컬 실행 방법 작성
+- [x] `apps/mobile` 디렉터리 생성
+- [x] `apps/web` 디렉터리 생성
+- [x] `packages/domain` 디렉터리 생성
+- [x] `packages/sync` 디렉터리 생성
+- [x] `packages/ui` 디렉터리 생성
+- [x] 패키지 매니저와 workspace 설정
+- [x] TypeScript 공통 설정 구성
+- [x] lint, format, test 명령 정의
+- [x] 환경 변수 파일 예시 작성
+- [x] README에 로컬 실행 방법 작성
 
 ### 2. 모바일 앱 기반
 
