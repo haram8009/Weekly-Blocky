@@ -45,6 +45,12 @@ corepack pnpm typecheck
 corepack pnpm --filter @weekly/mobile start
 ```
 
+웹 앱은 다음 명령으로 실행한다.
+
+```bash
+corepack pnpm --filter @weekly/web dev
+```
+
 ## 환경 변수
 
 루트 예시는 `.env.example`에 둔다. 앱별 공개 환경 변수는 다음 파일을 기준으로 복사해서 사용한다.

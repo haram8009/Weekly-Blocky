@@ -1,0 +1,51 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 48px 24px;
+  background: #f7f8fa;
+}
+
+.panel {
+  display: grid;
+  width: min(100%, 480px);
+  gap: 24px;
+}
+
+.copy {
+  display: grid;
+  gap: 12px;
+}
+
+.copy h1 {
+  margin: 0;
+  color: #17211b;
+  font-size: 34px;
+  line-height: 1.15;
+}
+
+.copy p {
+  margin: 0;
+  color: #627168;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.copy .product {
+  color: #236c5c;
+  font-weight: 800;
+}
+
+.notice {
+  margin: 0;
+  color: #b23a48;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.previewLink {
+  width: max-content;
+  color: #236c5c;
+  font-size: 14px;
+  font-weight: 800;
+}

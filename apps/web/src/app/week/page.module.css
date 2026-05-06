@@ -1,0 +1,131 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #236c5c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17211b;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.summary {
+  display: grid;
+  min-width: 132px;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.summary span {
+  color: #627168;
+  font-size: 13px;
+}
+
+.summary strong {
+  color: #17211b;
+  font-size: 22px;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.weekGrid {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: 72px repeat(7, minmax(72px, 1fr));
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.cornerCell,
+.dayCell,
+.timeCell,
+.blockCell {
+  min-height: 52px;
+  border-right: 1px solid #d8e0dc;
+  border-bottom: 1px solid #d8e0dc;
+}
+
+.dayCell,
+.timeCell {
+  display: grid;
+  place-items: center;
+  color: #627168;
+  font-size: 13px;
+  font-weight: 800;
+  background: #eef3f1;
+}
+
+.timeCell {
+  justify-items: end;
+  padding-right: 12px;
+  background: #ffffff;
+}
+
+.blockCell {
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(90deg, rgba(35, 108, 92, 0.08), rgba(217, 130, 75, 0.08))
+      border-box;
+}
+
+.sidePanel {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.sidePanel h2 {
+  margin: 0;
+  color: #17211b;
+  font-size: 18px;
+}
+
+.sidePanel p {
+  margin: 0;
+  color: #627168;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .weekGrid {
+    overflow-x: auto;
+    grid-template-columns: 72px repeat(7, 96px);
+  }
+}
