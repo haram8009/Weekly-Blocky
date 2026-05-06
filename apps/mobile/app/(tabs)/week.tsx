@@ -1,7 +1,12 @@
+import { getDatesOfWeek, getWeekStartDate, type DateString } from '@weekly/domain';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
 import { theme } from '@/theme';
+
+const previewDate: DateString = '2026-05-07';
+const previewWeekStartDate = getWeekStartDate(previewDate, 'monday');
+const previewWeekDates = getDatesOfWeek(previewWeekStartDate);
 
 export default function WeekScreen() {
   return (
@@ -9,6 +14,9 @@ export default function WeekScreen() {
       <View style={styles.header}>
         <Text style={styles.eyebrow}>이번 주</Text>
         <Text style={styles.title}>오늘 기준 주간 기록</Text>
+        <Text style={styles.weekRange}>
+          {previewWeekDates[0]} - {previewWeekDates[6]}
+        </Text>
       </View>
 
       <View style={styles.gridPlaceholder}>
@@ -33,6 +41,11 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     fontSize: theme.typography.heading,
     fontWeight: '900',
+  },
+  weekRange: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
   },
   gridPlaceholder: {
     minHeight: 360,

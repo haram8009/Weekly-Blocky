@@ -1,15 +1,15 @@
-export type WeekStartDay = 'monday' | 'sunday';
+import { DEFAULT_APP_SETTINGS, type Weekday } from '@weekly/domain';
 
 export type LocalAppSettings = {
-  weekStartDay: WeekStartDay;
+  weekStartDay: Weekday;
   defaultDayStartTime: string;
   timeZone: 'local';
   hasCompletedLocalSetup: boolean;
 };
 
 export const defaultLocalAppSettings: LocalAppSettings = {
-  weekStartDay: 'monday',
-  defaultDayStartTime: '06:00',
+  weekStartDay: DEFAULT_APP_SETTINGS.weekStartsOn,
+  defaultDayStartTime: DEFAULT_APP_SETTINGS.visibleStartTime,
   timeZone: 'local',
   hasCompletedLocalSetup: false,
 };

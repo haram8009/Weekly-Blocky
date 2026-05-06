@@ -1,9 +1,13 @@
+import { getDatesOfWeek, getWeekStartDate, type DateString } from '@weekly/domain';
 import { AppShell } from '@/components/AppShell';
 import styles from './page.module.css';
 import { Fragment } from 'react';
 
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const hours = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
+const previewDate: DateString = '2026-05-07';
+const previewWeekStartDate = getWeekStartDate(previewDate, 'monday');
+const previewWeekDates = getDatesOfWeek(previewWeekStartDate);
 
 export default function WeekPage() {
   return (
@@ -13,6 +17,9 @@ export default function WeekPage() {
           <div>
             <p className={styles.eyebrow}>이번 주</p>
             <h1 id="week-title">주간 기록 열람</h1>
+            <p className={styles.weekRange}>
+              {previewWeekDates[0]} - {previewWeekDates[6]}
+            </p>
           </div>
           <div className={styles.summary}>
             <span>총 기록</span>
@@ -23,9 +30,10 @@ export default function WeekPage() {
         <section className={styles.contentGrid}>
           <div className={styles.weekGrid} aria-label="주간 기록 그리드">
             <div className={styles.cornerCell} />
-            {days.map((day) => (
+            {days.map((day, index) => (
               <div className={styles.dayCell} key={day}>
-                {day}
+                <span>{day}</span>
+                <small>{previewWeekDates[index]?.slice(5).replace('-', '/')}</small>
               </div>
             ))}
 

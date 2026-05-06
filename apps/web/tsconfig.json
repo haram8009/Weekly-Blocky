@@ -9,6 +9,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
+      "@weekly/domain": ["../../packages/domain/src/index.ts"],
       "@weekly/ui": ["../../packages/ui/src/index.ts"]
     }
   },

@@ -126,4 +126,5 @@ export type SyncState = {
   updatedAt: TimestampString;
 };
 
+export * from './defaults';
 export * from './time';
