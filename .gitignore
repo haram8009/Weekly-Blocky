@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+.pnp.*
+.pnpm-store/
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Build outputs and caches
+dist/
+build/
+coverage/
+.cache/
+.turbo/
+.vite/
+.parcel-cache/
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+web-build/
+expo-env.d.ts
+
+# Expo generated native projects when using managed/CNG workflow
+/android/
+/ios/
+/apps/mobile/android/
+/apps/mobile/ios/
+
+# Mobile signing and provisioning files
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Next.js / Vercel
+.next/
+out/
+.vercel/
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test and tool artifacts
+playwright-report/
+test-results/
+.nyc_output/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Misc
+*.log
+*.orig
