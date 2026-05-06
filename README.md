@@ -18,7 +18,7 @@ packages/
 
 필요한 도구:
 
-- Node.js 20.18 이상
+- Node.js 20.19.4 이상
 - pnpm 10 이상
 
 처음 한 번 실행한다.
@@ -38,6 +38,12 @@ corepack pnpm typecheck
 ```
 
 모바일과 웹 실행 명령은 Expo 앱과 Next.js 앱을 생성하는 다음 마일스톤 단계에서 각 앱 패키지에 추가한다.
+
+모바일 앱은 다음 명령으로 실행한다.
+
+```bash
+corepack pnpm --filter @weekly/mobile start
+```
 
 ## 환경 변수
 

@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20.18.0",
+    "node": ">=20.19.4",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
@@ -17,7 +17,7 @@
     "format": "prettier --check \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
     "format:write": "prettier --write \"**/*.{js,mjs,cjs,json,yml,yaml,ts,tsx}\"",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -b --pretty --noEmit"
+    "typecheck": "corepack pnpm --filter './packages/*' --filter './apps/*' --if-present typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

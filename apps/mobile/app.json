@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Weekly",
+    "slug": "weekly-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "weekly",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
