@@ -11,17 +11,20 @@ import {
 import { createEntityId, createWeekReviewId } from './ids';
 import { mapCategoryRow, mapTimeEntryRow, mapWeekReviewRow } from './mappers';
 import type {
+  CreateCategoryRepositoryInput,
   CreateTimeEntryRepositoryInput,
   ListCategoriesOptions,
   SupabaseCategoryRow,
   SupabaseTimeEntryRow,
   SupabaseWeekReviewRow,
+  UpdateCategoryRepositoryInput,
   UpdateTimeEntryRepositoryInput,
   UpsertWeekReviewInput,
 } from './types';
 
 const READ_ERROR_MESSAGE = '서버 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
-const WRITE_ERROR_MESSAGE = '서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
+const WRITE_ERROR_MESSAGE =
+  '서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
 
 export class SupabaseCategoryRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -71,6 +74,49 @@ export class SupabaseCategoryRepository {
     }
 
     return data ? mapCategoryRow(data as SupabaseCategoryRow) : null;
+  }
+
+  async insertCategory(input: CreateCategoryRepositoryInput): Promise<Category> {
+    const userId = await requireCurrentUserId(this.client);
+    const now = input.now ?? new Date().toISOString();
+    const { data, error } = await this.client
+      .from('categories')
+      .insert(toCategoryInsertPayload(input, userId, now))
+      .select()
+      .single();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    return mapCategoryRow(data as SupabaseCategoryRow);
+  }
+
+  async updateCategory(input: UpdateCategoryRepositoryInput): Promise<Category> {
+    const userId = await requireCurrentUserId(this.client);
+    const { id, now, ...changes } = input;
+    const { data, error } = await this.client
+      .from('categories')
+      .update(toCategoryUpdatePayload(changes, now ?? new Date().toISOString()))
+      .eq('user_id', userId)
+      .eq('id', id)
+      .is('deleted_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    if (!data) {
+      throw new SupabaseStorageError(
+        'NOT_FOUND',
+        '수정할 카테고리를 찾지 못했습니다. 서버 데이터를 새로고침한 뒤 다시 시도해주세요.',
+        `Category not found: ${id}`,
+      );
+    }
+
+    return mapCategoryRow(data as SupabaseCategoryRow);
   }
 }
 
@@ -311,6 +357,20 @@ export function getCategoryById(client: SupabaseClient, id: string): Promise<Cat
   return new SupabaseCategoryRepository(client).getCategoryById(id);
 }
 
+export function createCategory(
+  client: SupabaseClient,
+  input: CreateCategoryRepositoryInput,
+): Promise<Category> {
+  return new SupabaseCategoryRepository(client).insertCategory(input);
+}
+
+export function updateCategory(
+  client: SupabaseClient,
+  input: UpdateCategoryRepositoryInput,
+): Promise<Category> {
+  return new SupabaseCategoryRepository(client).updateCategory(input);
+}
+
 export function getWeekReviewByWeekStartDate(
   client: SupabaseClient,
   weekStartDate: DateString,
@@ -323,6 +383,96 @@ export function upsertWeekReview(
   input: UpsertWeekReviewInput,
 ): Promise<WeekReview> {
   return new SupabaseWeekReviewRepository(client).upsertWeekReview(input);
+}
+
+function toCategoryInsertPayload(
+  input: CreateCategoryRepositoryInput,
+  userId: string,
+  now: string,
+) {
+  return {
+    id: input.id ?? createEntityId('category'),
+    user_id: userId,
+    name: normalizeRequiredCategoryText(input.name, 'name'),
+    color: normalizeRequiredCategoryText(input.color, 'color'),
+    emoji: normalizeRequiredCategoryText(input.emoji, 'emoji'),
+    weekly_goal_minutes: normalizeWeeklyGoalMinutes(input.weeklyGoalMinutes),
+    sort_order: normalizeSortOrder(input.sortOrder),
+    is_archived: false,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
+}
+
+function toCategoryUpdatePayload(
+  changes: Omit<UpdateCategoryRepositoryInput, 'id' | 'now'>,
+  updatedAt: string,
+) {
+  return {
+    ...(changes.name !== undefined
+      ? { name: normalizeRequiredCategoryText(changes.name, 'name') }
+      : {}),
+    ...(changes.color !== undefined
+      ? { color: normalizeRequiredCategoryText(changes.color, 'color') }
+      : {}),
+    ...(changes.emoji !== undefined
+      ? { emoji: normalizeRequiredCategoryText(changes.emoji, 'emoji') }
+      : {}),
+    ...(changes.weeklyGoalMinutes !== undefined
+      ? { weekly_goal_minutes: normalizeWeeklyGoalMinutes(changes.weeklyGoalMinutes) }
+      : {}),
+    ...(changes.sortOrder !== undefined
+      ? { sort_order: normalizeSortOrder(changes.sortOrder) }
+      : {}),
+    updated_at: updatedAt,
+  };
+}
+
+function normalizeRequiredCategoryText(value: string, fieldName: string): string {
+  const normalizedValue = value.trim();
+
+  if (normalizedValue.length === 0) {
+    throw new SupabaseStorageError(
+      'VALIDATION_FAILED',
+      '카테고리 이름, 색상, 이모지는 모두 입력해야 합니다.',
+      `Category ${fieldName} is required.`,
+    );
+  }
+
+  return normalizedValue;
+}
+
+function normalizeWeeklyGoalMinutes(value: number | null | undefined): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!Number.isInteger(value) || value < 0) {
+    throw new SupabaseStorageError(
+      'VALIDATION_FAILED',
+      '주간 목표 시간은 0 이상의 정수 분 단위로 입력해야 합니다.',
+      `Invalid weekly goal minutes: ${value}`,
+    );
+  }
+
+  return value;
+}
+
+function normalizeSortOrder(value: number | undefined): number {
+  if (value === undefined) {
+    return 0;
+  }
+
+  if (!Number.isInteger(value)) {
+    throw new SupabaseStorageError(
+      'VALIDATION_FAILED',
+      '카테고리 표시 순서는 정수로 입력해야 합니다.',
+      `Invalid category sort order: ${value}`,
+    );
+  }
+
+  return value;
 }
 
 function toTimeEntryUpdatePayload(

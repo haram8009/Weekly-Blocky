@@ -1,8 +1,12 @@
 import {
+  createCategory,
   getCategoryById,
   listActiveCategories,
   listCategories,
+  updateCategory,
+  type CreateCategoryInput,
   type ListCategoriesOptions,
+  type UpdateCategoryInput,
 } from '@weekly/data';
 
 import { getSupabaseClient } from './client';
@@ -19,4 +23,12 @@ export function getMobileCategoryById(id: string) {
   return getCategoryById(getSupabaseClient(), id);
 }
 
-export type { ListCategoriesOptions } from '@weekly/data';
+export function createMobileCategory(input: CreateCategoryInput) {
+  return createCategory(getSupabaseClient(), input);
+}
+
+export function updateMobileCategory(input: UpdateCategoryInput) {
+  return updateCategory(getSupabaseClient(), input);
+}
+
+export type { CreateCategoryInput, ListCategoriesOptions, UpdateCategoryInput } from '@weekly/data';

@@ -52,6 +52,30 @@ export type ListCategoriesOptions = {
   includeDeleted?: boolean;
 };
 
+export type CreateCategoryInput = {
+  id?: EntityId;
+  name: string;
+  color: string;
+  emoji: string;
+  weeklyGoalMinutes?: number | null;
+  sortOrder?: number;
+  now?: TimestampString;
+};
+
+export type CreateCategoryRepositoryInput = CreateCategoryInput;
+
+export type UpdateCategoryInput = {
+  id: EntityId;
+  name?: string;
+  color?: string;
+  emoji?: string;
+  weeklyGoalMinutes?: number | null;
+  sortOrder?: number;
+  now?: TimestampString;
+};
+
+export type UpdateCategoryRepositoryInput = UpdateCategoryInput;
+
 export type CreateTimeEntryInput = {
   id?: EntityId;
   date: DateString;
