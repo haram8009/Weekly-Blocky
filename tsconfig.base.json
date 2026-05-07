@@ -5,12 +5,11 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
-    "baseUrl": ".",
     "paths": {
-      "@weekly/data": ["packages/data/src/index.ts"],
-      "@weekly/domain": ["packages/domain/src/index.ts"],
-      "@weekly/sync": ["packages/sync/src/index.ts"],
-      "@weekly/ui": ["packages/ui/src/index.ts"]
+      "@weekly/data": ["./packages/data/src/index.ts"],
+      "@weekly/domain": ["./packages/domain/src/index.ts"],
+      "@weekly/sync": ["./packages/sync/src/index.ts"],
+      "@weekly/ui": ["./packages/ui/src/index.ts"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,

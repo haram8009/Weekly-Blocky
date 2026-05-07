@@ -1,5 +1,10 @@
-import type { DateString, TimeEntry } from '@weekly/domain';
-import { validateTimeRange } from '@weekly/domain';
+import type {
+  DateString,
+  EntryOverlapResolution,
+  TimeEntry,
+  TimestampString,
+} from '@weekly/domain';
+import { resolveEntryOverlaps, validateTimeRange } from '@weekly/domain';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { SupabaseStorageError } from './errors';
@@ -15,8 +20,13 @@ export class SupabaseTimeEntryService {
 
   async createTimeEntry(input: CreateTimeEntryInput): Promise<TimeEntry> {
     assertValidTimeRange(input.startTime, input.endTime);
+    const now = input.now ?? new Date().toISOString();
+    const existingEntries = await this.repository.listTimeEntriesByDate(input.date);
+    const overlapResolution = resolveEntryOverlaps(existingEntries, input);
 
-    return this.repository.insertTimeEntry(input);
+    await this.applyOverlapResolution(overlapResolution, now);
+
+    return this.repository.insertTimeEntry({ ...input, now });
   }
 
   async updateTimeEntry(input: UpdateTimeEntryInput): Promise<TimeEntry> {
@@ -30,12 +40,28 @@ export class SupabaseTimeEntryService {
       );
     }
 
-    assertValidTimeRange(
-      input.startTime ?? existingEntry.startTime,
-      input.endTime ?? existingEntry.endTime,
-    );
+    const now = input.now ?? new Date().toISOString();
+    const nextRange = {
+      id: input.id,
+      date: input.date ?? existingEntry.date,
+      startTime: input.startTime ?? existingEntry.startTime,
+      endTime: input.endTime ?? existingEntry.endTime,
+    };
 
-    return this.repository.updateTimeEntry(input);
+    assertValidTimeRange(nextRange.startTime, nextRange.endTime);
+
+    const existingEntries = await this.repository.listTimeEntriesByDate(nextRange.date);
+    const overlapResolution = resolveEntryOverlaps(existingEntries, nextRange);
+
+    await this.applyOverlapResolution(overlapResolution, now);
+
+    return this.repository.updateTimeEntry({
+      ...input,
+      date: nextRange.date,
+      startTime: nextRange.startTime,
+      endTime: nextRange.endTime,
+      now,
+    });
   }
 
   async deleteTimeEntry(input: DeleteTimeEntryInput): Promise<TimeEntry> {
@@ -49,25 +75,76 @@ export class SupabaseTimeEntryService {
   async listTimeEntriesByWeek(weekStartDate: DateString): Promise<TimeEntry[]> {
     return this.repository.listTimeEntriesByWeek(weekStartDate);
   }
+
+  private async applyOverlapResolution(
+    resolution: EntryOverlapResolution<TimeEntry>,
+    now: TimestampString,
+  ): Promise<void> {
+    for (const split of resolution.splits) {
+      await this.repository.updateTimeEntry({
+        id: split.entry.id,
+        startTime: split.before.startTime,
+        endTime: split.before.endTime,
+        now,
+      });
+      await this.repository.insertTimeEntry({
+        date: split.entry.date,
+        startTime: split.after.startTime,
+        endTime: split.after.endTime,
+        categoryId: split.entry.categoryId,
+        note: split.entry.note,
+        source: split.entry.source,
+        now,
+      });
+    }
+
+    for (const update of resolution.updates) {
+      await this.repository.updateTimeEntry({
+        id: update.entry.id,
+        startTime: update.patch.startTime,
+        endTime: update.patch.endTime,
+        now,
+      });
+    }
+
+    for (const entry of resolution.deletes) {
+      await this.repository.softDeleteTimeEntry(entry.id, now);
+    }
+  }
 }
 
-export function createTimeEntry(client: SupabaseClient, input: CreateTimeEntryInput): Promise<TimeEntry> {
+export function createTimeEntry(
+  client: SupabaseClient,
+  input: CreateTimeEntryInput,
+): Promise<TimeEntry> {
   return new SupabaseTimeEntryService(client).createTimeEntry(input);
 }
 
-export function updateTimeEntry(client: SupabaseClient, input: UpdateTimeEntryInput): Promise<TimeEntry> {
+export function updateTimeEntry(
+  client: SupabaseClient,
+  input: UpdateTimeEntryInput,
+): Promise<TimeEntry> {
   return new SupabaseTimeEntryService(client).updateTimeEntry(input);
 }
 
-export function deleteTimeEntry(client: SupabaseClient, input: DeleteTimeEntryInput): Promise<TimeEntry> {
+export function deleteTimeEntry(
+  client: SupabaseClient,
+  input: DeleteTimeEntryInput,
+): Promise<TimeEntry> {
   return new SupabaseTimeEntryService(client).deleteTimeEntry(input);
 }
 
-export function listTimeEntriesByDate(client: SupabaseClient, date: DateString): Promise<TimeEntry[]> {
+export function listTimeEntriesByDate(
+  client: SupabaseClient,
+  date: DateString,
+): Promise<TimeEntry[]> {
   return new SupabaseTimeEntryService(client).listTimeEntriesByDate(date);
 }
 
-export function listTimeEntriesByWeek(client: SupabaseClient, weekStartDate: DateString): Promise<TimeEntry[]> {
+export function listTimeEntriesByWeek(
+  client: SupabaseClient,
+  weekStartDate: DateString,
+): Promise<TimeEntry[]> {
   return new SupabaseTimeEntryService(client).listTimeEntriesByWeek(weekStartDate);
 }
 
