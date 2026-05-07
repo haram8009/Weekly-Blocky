@@ -228,20 +228,22 @@ MVP의 기록 CRUD 기본 경로에서는 위 로컬 DB를 사용하지 않는�
 
 ### 4. Supabase 기록 저장 계층
 
-- [ ] Supabase category repository 작성
-- [ ] Supabase time entry repository 작성
-- [ ] Supabase week review repository 초안 작성
-- [ ] `createTimeEntry` 서비스 작성
-- [ ] `updateTimeEntry` 서비스 작성
-- [ ] `deleteTimeEntry` 서비스 작성
-- [ ] 날짜별 기록 조회 함수 작성
-- [ ] 주간 기록 조회 함수 작성
-- [ ] 카테고리 조회 함수 작성
-- [ ] 인증 세션 없는 write 차단
-- [ ] 현재 사용자 ID 기준 조회와 저장
-- [ ] 모든 write 작업에서 `updatedAt` 갱신
-- [ ] delete는 `deletedAt` soft delete로 처리
-- [ ] 네트워크 또는 서버 저장 실패 시 사용자에게 오류 표시
+- [x] Supabase category repository 작성
+- [x] Supabase time entry repository 작성
+- [x] Supabase week review repository 초안 작성
+- [x] `createTimeEntry` 서비스 작성
+- [x] `updateTimeEntry` 서비스 작성
+- [x] `deleteTimeEntry` 서비스 작성
+- [x] 날짜별 기록 조회 함수 작성
+- [x] 주간 기록 조회 함수 작성
+- [x] 카테고리 조회 함수 작성
+- [x] 모바일 앱용 Supabase 호출 adapter 작성
+- [x] Supabase 저장 계층과 후속 오프라인 sync 패키지 역할 분리
+- [x] 인증 세션 없는 write 차단
+- [x] 현재 사용자 ID 기준 조회와 저장
+- [x] 모든 write 작업에서 `updatedAt` 갱신
+- [x] delete는 `deletedAt` soft delete로 처리
+- [x] 네트워크 또는 서버 저장 실패 시 사용자에게 오류 표시
 
 ### 5. 기록 겹침 처리
 

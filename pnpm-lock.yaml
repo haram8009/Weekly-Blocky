@@ -44,6 +44,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.105.3
         version: 2.105.3
+      '@weekly/data':
+        specifier: workspace:*
+        version: link:../../packages/data
       '@weekly/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -105,6 +108,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.105.3
         version: 2.105.3
+      '@weekly/data':
+        specifier: workspace:*
+        version: link:../../packages/data
       '@weekly/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -127,6 +133,15 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.14)
+
+  packages/data:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.105.3
+        version: 2.105.3
+      '@weekly/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/domain: {}
 

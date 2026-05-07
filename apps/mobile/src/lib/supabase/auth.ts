@@ -1,4 +1,4 @@
-import { createMobileSupabaseClient } from './client';
+import { getSupabaseClient } from './client';
 
 export type SupabaseAuthConnectionResult = {
   isConnected: boolean;
@@ -7,7 +7,7 @@ export type SupabaseAuthConnectionResult = {
 
 export async function checkMobileSupabaseAuthConnection(): Promise<SupabaseAuthConnectionResult> {
   try {
-    const { error } = await createMobileSupabaseClient().auth.getSession();
+    const { error } = await getSupabaseClient().auth.getSession();
 
     return {
       isConnected: !error,

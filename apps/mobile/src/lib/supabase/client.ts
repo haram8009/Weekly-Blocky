@@ -5,16 +5,16 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getMobileSupabaseEnv } from './env';
 import { secureStoreAdapter } from './secureStoreAdapter';
 
-let mobileSupabaseClient: SupabaseClient | null = null;
+let supabaseClient: SupabaseClient | null = null;
 
-export function createMobileSupabaseClient() {
-  if (mobileSupabaseClient) {
-    return mobileSupabaseClient;
+export function getSupabaseClient() {
+  if (supabaseClient) {
+    return supabaseClient;
   }
 
   const { url, publishableKey } = getMobileSupabaseEnv();
 
-  mobileSupabaseClient = createClient(url, publishableKey, {
+  supabaseClient = createClient(url, publishableKey, {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: false,
@@ -23,5 +23,5 @@ export function createMobileSupabaseClient() {
     },
   });
 
-  return mobileSupabaseClient;
+  return supabaseClient;
 }
