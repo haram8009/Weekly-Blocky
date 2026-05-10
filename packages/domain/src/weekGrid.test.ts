@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildWeekGrid } from './weekGrid';
+import { buildWeekGrid, createWeekGridTimeRangeSelection } from './weekGrid';
 
 describe('week grid utilities', () => {
   it('월요일 시작 7일과 기본 표시 범위의 10분 블록 데이터를 생성한다', () => {
@@ -63,5 +63,40 @@ describe('week grid utilities', () => {
       startMinutes: 1430,
       endMinutes: 1440,
     });
+  });
+
+  it('선택한 블록 범위를 10분 단위 시간 범위로 변환한다', () => {
+    const grid = buildWeekGrid({ weekStartDate: '2026-05-04' });
+    const blocks = grid.days[0]?.blocks ?? [];
+
+    expect(createWeekGridTimeRangeSelection(blocks, 24, 29)).toEqual({
+      date: '2026-05-04',
+      startSlotIndex: 24,
+      endSlotIndex: 29,
+      startTime: '09:00',
+      endTime: '10:00',
+      blockCount: 6,
+    });
+  });
+
+  it('선택 시작과 끝이 바뀌어도 올바른 시간 범위로 정렬한다', () => {
+    const grid = buildWeekGrid({ weekStartDate: '2026-05-04' });
+    const blocks = grid.days[0]?.blocks ?? [];
+
+    expect(createWeekGridTimeRangeSelection(blocks, 29, 24)).toEqual({
+      date: '2026-05-04',
+      startSlotIndex: 24,
+      endSlotIndex: 29,
+      startTime: '09:00',
+      endTime: '10:00',
+      blockCount: 6,
+    });
+  });
+
+  it('그리드 범위를 벗어난 선택은 거부한다', () => {
+    const grid = buildWeekGrid({ weekStartDate: '2026-05-04' });
+    const blocks = grid.days[0]?.blocks ?? [];
+
+    expect(() => createWeekGridTimeRangeSelection(blocks, 0, 999)).toThrow();
   });
 });

@@ -39,6 +39,15 @@ export type BuildWeekGridOptions = {
   useFullDayView?: boolean;
 };
 
+export type WeekGridTimeRangeSelection = {
+  date: DateString;
+  startSlotIndex: number;
+  endSlotIndex: number;
+  startTime: TimeString;
+  endTime: TimeString;
+  blockCount: number;
+};
+
 export function buildWeekGrid({
   weekStartDate,
   useFullDayView = false,
@@ -64,6 +73,40 @@ export function buildWeekGrid({
     blocksPerDay,
     totalBlockCount: blocksPerDay * dates.length,
     useFullDayView,
+  };
+}
+
+export function createWeekGridTimeRangeSelection(
+  blocks: readonly WeekGridBlock[],
+  anchorSlotIndex: number,
+  focusSlotIndex: number,
+): WeekGridTimeRangeSelection {
+  if (blocks.length === 0) {
+    throw new Error('선택할 그리드 블록이 없습니다.');
+  }
+
+  const startSlotIndex = Math.min(anchorSlotIndex, focusSlotIndex);
+  const endSlotIndex = Math.max(anchorSlotIndex, focusSlotIndex);
+  const startBlock = blocks[startSlotIndex];
+  const endBlock = blocks[endSlotIndex];
+
+  if (!startBlock || !endBlock) {
+    throw new Error(`선택 범위가 그리드 범위를 벗어났습니다: ${anchorSlotIndex}-${focusSlotIndex}`);
+  }
+
+  if (startBlock.date !== endBlock.date) {
+    throw new Error(
+      `선택 범위는 같은 날짜 안에 있어야 합니다: ${startBlock.date}-${endBlock.date}`,
+    );
+  }
+
+  return {
+    date: startBlock.date,
+    startSlotIndex,
+    endSlotIndex,
+    startTime: startBlock.startTime,
+    endTime: endBlock.endTime,
+    blockCount: endSlotIndex - startSlotIndex + 1,
   };
 }
 
