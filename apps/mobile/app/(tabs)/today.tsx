@@ -37,12 +37,15 @@ import {
 import { Screen } from '@/components/Screen';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
+import { getMobileSettings } from '@/lib/supabase/settings';
 import {
   createMobileTimeEntry,
   deleteMobileTimeEntry,
   listMobileTimeEntriesByDate,
   updateMobileTimeEntry,
 } from '@/lib/supabase/timeEntries';
+import type { DatePhotoAsset } from '@/photos/datePhotoAssets';
+import { listDatePhotoAssets } from '@/photos/mediaLibrary';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
@@ -77,6 +80,7 @@ type SelectionDraft = {
 };
 
 type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
+type DayPhotosLoadState = 'idle' | 'loading' | 'ready' | 'disabled' | 'permission-denied' | 'error';
 type EntrySaveState = 'idle' | 'saving' | 'error';
 type EntryEditSaveState = 'idle' | 'saving' | 'deleting' | 'error';
 
@@ -129,6 +133,10 @@ export default function TodayScreen() {
   const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
+  const [dayPhotos, setDayPhotos] = useState<DatePhotoAsset[]>([]);
+  const [dayPhotosLoadState, setDayPhotosLoadState] = useState<DayPhotosLoadState>('idle');
+  const [dayPhotosPermissionScope, setDayPhotosPermissionScope] = useState<string | null>(null);
+  const [dayPhotosErrorMessage, setDayPhotosErrorMessage] = useState<string | null>(null);
   const [entrySaveState, setEntrySaveState] = useState<EntrySaveState>('idle');
   const [entrySaveErrorMessage, setEntrySaveErrorMessage] = useState<string | null>(null);
   const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
@@ -280,6 +288,62 @@ export default function TodayScreen() {
         setDayEntries([]);
         setCategories([]);
         setDayEntriesLoadState('error');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+    let isActive = true;
+
+    setDayPhotos([]);
+    setDayPhotosPermissionScope(null);
+    setDayPhotosErrorMessage(null);
+
+    if (!envStatus.isConfigured) {
+      setDayPhotosLoadState('disabled');
+      return;
+    }
+
+    setDayPhotosLoadState('loading');
+
+    getMobileSettings()
+      .then((settings) => {
+        if (!settings?.photoMatchingEnabled) {
+          return {
+            state: 'disabled' as const,
+            assets: [],
+            permissionScope: null,
+            errorMessage: null,
+          };
+        }
+
+        return listDatePhotoAssets(selectedDate);
+      })
+      .then((result) => {
+        if (!isActive) {
+          return;
+        }
+
+        setDayPhotos(result.assets);
+        setDayPhotosPermissionScope(result.permissionScope);
+        setDayPhotosLoadState(result.state);
+        setDayPhotosErrorMessage(result.errorMessage);
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setDayPhotos([]);
+        setDayPhotosPermissionScope(null);
+        setDayPhotosLoadState('error');
+        setDayPhotosErrorMessage(
+          error instanceof Error ? error.message : '이 날짜 사진을 불러오지 못했습니다.',
+        );
       });
 
     return () => {
@@ -908,6 +972,12 @@ export default function TodayScreen() {
           <Text style={styles.summaryMetricLabel}>최다</Text>
           <Text style={styles.summaryMetricValue}>{dailySummary.topCategoryLabel ?? '없음'}</Text>
         </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>사진</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDayPhotoSummary(dayPhotosLoadState, dayPhotos.length)}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.gridHeader}>
@@ -917,6 +987,12 @@ export default function TodayScreen() {
       </View>
 
       {renderDayStateBanner(dayEntriesLoadState)}
+      {renderDayPhotoStateBanner(
+        dayPhotosLoadState,
+        dayPhotos.length,
+        dayPhotosPermissionScope,
+        dayPhotosErrorMessage,
+      )}
 
       <View style={styles.dayGrid}>
         <View style={styles.gridBody}>
@@ -1262,6 +1338,16 @@ export default function TodayScreen() {
                     />
                   </View>
 
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.timeInputLabel}>사진</Text>
+                    {renderEntryPhotoLookupContent(
+                      dayPhotosLoadState,
+                      dayPhotos.length,
+                      dayPhotosPermissionScope,
+                      dayPhotosErrorMessage,
+                    )}
+                  </View>
+
                   {editValidationErrorMessage ? (
                     <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
                   ) : null}
@@ -1492,6 +1578,80 @@ function renderDayStateBanner(state: DayEntriesLoadState) {
   return null;
 }
 
+function renderDayPhotoStateBanner(
+  state: DayPhotosLoadState,
+  photoCount: number,
+  permissionScope: string | null,
+  errorMessage: string | null,
+) {
+  if (state === 'loading' || state === 'idle') {
+    return <Text style={styles.photoStateBanner}>사진 단서를 확인하고 있습니다.</Text>;
+  }
+
+  if (state === 'disabled') {
+    return null;
+  }
+
+  if (state === 'permission-denied') {
+    return (
+      <Text style={styles.photoStateBanner}>
+        사진 접근 권한이 없어 사진 단서를 표시하지 않습니다.
+      </Text>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <Text style={[styles.photoStateBanner, styles.dayStateBannerError]}>
+        {errorMessage ?? '사진을 불러오지 못했습니다.'}
+      </Text>
+    );
+  }
+
+  if (permissionScope === 'limited') {
+    return (
+      <Text style={styles.photoStateBanner}>
+        제한 권한으로 허용된 사진 {photoCount}개를 확인했습니다.
+      </Text>
+    );
+  }
+
+  return <Text style={styles.photoStateBanner}>이 날짜 사진 {photoCount}개를 확인했습니다.</Text>;
+}
+
+function renderEntryPhotoLookupContent(
+  state: DayPhotosLoadState,
+  photoCount: number,
+  permissionScope: string | null,
+  errorMessage: string | null,
+) {
+  if (state === 'loading' || state === 'idle') {
+    return <Text style={styles.entryPhotoStatus}>사진을 확인하고 있습니다.</Text>;
+  }
+
+  if (state === 'disabled') {
+    return <Text style={styles.entryPhotoStatus}>설정에서 사진 매칭이 꺼져 있습니다.</Text>;
+  }
+
+  if (state === 'permission-denied') {
+    return <Text style={styles.entryPhotoStatus}>사진 접근 권한이 없습니다.</Text>;
+  }
+
+  if (state === 'error') {
+    return (
+      <Text style={[styles.entryPhotoStatus, styles.entryPhotoStatusError]}>
+        {errorMessage ?? '사진을 불러오지 못했습니다.'}
+      </Text>
+    );
+  }
+
+  return (
+    <Text style={styles.entryPhotoStatus}>
+      {permissionScope === 'limited' ? '허용된 사진' : '이 날짜 사진'} {photoCount}개
+    </Text>
+  );
+}
+
 function renderEntryListContent(
   state: DayEntriesLoadState,
   items: readonly DailyEntryListItem[],
@@ -1547,6 +1707,26 @@ function getLocalDateString(date = new Date()): DateString {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
+}
+
+function formatDayPhotoSummary(state: DayPhotosLoadState, photoCount: number): string {
+  if (state === 'loading' || state === 'idle') {
+    return '확인 중';
+  }
+
+  if (state === 'disabled') {
+    return '꺼짐';
+  }
+
+  if (state === 'permission-denied') {
+    return '권한 없음';
+  }
+
+  if (state === 'error') {
+    return '오류';
+  }
+
+  return `${photoCount}개`;
 }
 
 function formatMonthDay(date: DateString): string {
@@ -1669,6 +1849,17 @@ const styles = StyleSheet.create({
   dayStateBannerError: {
     borderColor: theme.color.danger,
     color: theme.color.danger,
+  },
+  photoStateBanner: {
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
   },
   dayGrid: {
     borderWidth: 1,
@@ -1795,6 +1986,20 @@ const styles = StyleSheet.create({
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
+  },
+  entryPhotoStatus: {
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surfaceMuted,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+    padding: theme.spacing.md,
+  },
+  entryPhotoStatusError: {
+    borderColor: theme.color.danger,
+    color: theme.color.danger,
   },
   drawerOverlay: {
     flex: 1,
