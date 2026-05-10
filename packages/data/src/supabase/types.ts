@@ -137,6 +137,17 @@ export type DeleteTimeEntryInput = {
   now?: TimestampString;
 };
 
+export type UpdateSettingsInput = {
+  weekStartsOn?: AppSettings['weekStartsOn'];
+  visibleStartTime?: TimeString;
+  visibleEndTime?: TimeString;
+  useFullDayView?: boolean;
+  photoMatchingEnabled?: boolean;
+  thumbnailSyncEnabled?: boolean;
+  lastOpenedWeekStartDate?: DateString | null;
+  now?: TimestampString;
+};
+
 export type UpsertWeekReviewInput = {
   id?: EntityId;
   weekStartDate: DateString;

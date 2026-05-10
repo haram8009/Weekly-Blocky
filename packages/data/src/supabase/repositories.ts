@@ -34,6 +34,7 @@ import type {
   SupabaseUserProfileRow,
   SupabaseWeekReviewRow,
   UpdateCategoryRepositoryInput,
+  UpdateSettingsInput,
   UpdateTimeEntryRepositoryInput,
   UpsertWeekReviewInput,
 } from './types';
@@ -465,6 +466,34 @@ export class SupabaseSettingsRepository {
 
     return mapSettingsRow(data as SupabaseSettingsRow);
   }
+
+  async updateSettings(input: UpdateSettingsInput): Promise<AppSettings> {
+    const userId = await requireCurrentUserId(this.client);
+    const now = input.now ?? new Date().toISOString();
+
+    await this.ensureDefaultSettings(now);
+
+    const { data, error } = await this.client
+      .from('settings')
+      .update(toSettingsUpdatePayload(input, now))
+      .eq('user_id', userId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    if (!data) {
+      throw new SupabaseStorageError(
+        'QUERY_FAILED',
+        READ_ERROR_MESSAGE,
+        'Settings update returned no row.',
+      );
+    }
+
+    return mapSettingsRow(data as SupabaseSettingsRow);
+  }
 }
 
 export function createSupabaseRepositories(client: SupabaseClient) {
@@ -545,6 +574,13 @@ export function ensureDefaultSettings(client: SupabaseClient): Promise<AppSettin
   return new SupabaseSettingsRepository(client).ensureDefaultSettings();
 }
 
+export function updateSettings(
+  client: SupabaseClient,
+  input: UpdateSettingsInput,
+): Promise<AppSettings> {
+  return new SupabaseSettingsRepository(client).updateSettings(input);
+}
+
 function toCategoryInsertPayload(
   input: CreateCategoryRepositoryInput,
   userId: string,
@@ -578,6 +614,25 @@ function toSettingsInsertPayload(settings: AppSettings) {
     last_opened_week_start_date: settings.lastOpenedWeekStartDate,
     created_at: settings.createdAt,
     updated_at: settings.updatedAt,
+  };
+}
+
+function toSettingsUpdatePayload(input: UpdateSettingsInput, updatedAt: string) {
+  return {
+    ...(input.weekStartsOn !== undefined ? { week_starts_on: input.weekStartsOn } : {}),
+    ...(input.visibleStartTime !== undefined ? { visible_start_time: input.visibleStartTime } : {}),
+    ...(input.visibleEndTime !== undefined ? { visible_end_time: input.visibleEndTime } : {}),
+    ...(input.useFullDayView !== undefined ? { use_full_day_view: input.useFullDayView } : {}),
+    ...(input.photoMatchingEnabled !== undefined
+      ? { photo_matching_enabled: input.photoMatchingEnabled }
+      : {}),
+    ...(input.thumbnailSyncEnabled !== undefined
+      ? { thumbnail_sync_enabled: input.thumbnailSyncEnabled }
+      : {}),
+    ...(input.lastOpenedWeekStartDate !== undefined
+      ? { last_opened_week_start_date: input.lastOpenedWeekStartDate }
+      : {}),
+    updated_at: updatedAt,
   };
 }
 

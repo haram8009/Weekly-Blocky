@@ -6,7 +6,16 @@
     "orientation": "portrait",
     "scheme": "weekly",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "기록 시간대 사진을 작은 단서로 보여주기 위해 사진 접근 권한이 필요합니다. 사진 원본은 자동 업로드하지 않습니다.",
+          "savePhotosPermission": "Weekly는 사진 원본을 자동 저장하거나 업로드하지 않습니다."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

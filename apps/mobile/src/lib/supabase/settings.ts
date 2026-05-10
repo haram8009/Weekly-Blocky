@@ -1,4 +1,9 @@
-import { ensureDefaultSettings, getSettings } from '@weekly/data';
+import {
+  ensureDefaultSettings,
+  getSettings,
+  updateSettings,
+  type UpdateSettingsInput,
+} from '@weekly/data';
 
 import { getSupabaseClient } from './client';
 
@@ -9,3 +14,9 @@ export function getMobileSettings() {
 export function ensureMobileDefaultSettings() {
   return ensureDefaultSettings(getSupabaseClient());
 }
+
+export function updateMobileSettings(input: UpdateSettingsInput) {
+  return updateSettings(getSupabaseClient(), input);
+}
+
+export type { UpdateSettingsInput } from '@weekly/data';
