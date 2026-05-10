@@ -1,28 +1,107 @@
 import { addDaysToDate, getDatesOfWeek, getWeekStartDate, type DateString } from '@weekly/domain';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
+import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
+import { listMobileTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
 import { theme } from '@/theme';
+import { createRecordedDateSet } from '@/weekViewModel';
+import { loadLastOpenedWeekStartDate, saveLastOpenedWeekStartDate } from '@/weekViewPreferences';
 
 const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'] as const;
 const WEEK_STEP_DAYS = 7;
 
+type WeekEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
+
 export default function WeekScreen() {
   const todayDate = getLocalDateString();
   const todayWeekStartDate = getWeekStartDate(todayDate, 'monday');
+  const hasUserChangedWeekRef = useRef(false);
   const [visibleWeekStartDate, setVisibleWeekStartDate] = useState<DateString>(todayWeekStartDate);
+  const [hasLoadedLastOpenedWeek, setHasLoadedLastOpenedWeek] = useState(false);
+  const [recordedDates, setRecordedDates] = useState<ReadonlySet<DateString>>(() => new Set());
+  const [weekEntriesLoadState, setWeekEntriesLoadState] = useState<WeekEntriesLoadState>('idle');
   const visibleWeekDates = useMemo(
     () => getDatesOfWeek(visibleWeekStartDate),
     [visibleWeekStartDate],
   );
   const isCurrentWeek = visibleWeekStartDate === todayWeekStartDate;
+  const shouldShowRecordStatus = weekEntriesLoadState === 'ready';
+
+  useEffect(() => {
+    let isActive = true;
+
+    void loadLastOpenedWeekStartDate()
+      .then((lastOpenedWeekStartDate) => {
+        if (!isActive || !lastOpenedWeekStartDate || hasUserChangedWeekRef.current) {
+          return;
+        }
+
+        setVisibleWeekStartDate(lastOpenedWeekStartDate);
+      })
+      .finally(() => {
+        if (isActive) {
+          setHasLoadedLastOpenedWeek(true);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedLastOpenedWeek) {
+      return;
+    }
+
+    void saveLastOpenedWeekStartDate(visibleWeekStartDate).catch(() => undefined);
+  }, [hasLoadedLastOpenedWeek, visibleWeekStartDate]);
+
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+
+    if (!envStatus.isConfigured) {
+      setRecordedDates(new Set());
+      setWeekEntriesLoadState('unconfigured');
+      return;
+    }
+
+    let isActive = true;
+
+    setWeekEntriesLoadState('loading');
+
+    void listMobileTimeEntriesByWeek(visibleWeekStartDate)
+      .then((entries) => {
+        if (!isActive) {
+          return;
+        }
+
+        setRecordedDates(createRecordedDateSet(entries));
+        setWeekEntriesLoadState('ready');
+      })
+      .catch(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setRecordedDates(new Set());
+        setWeekEntriesLoadState('error');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [visibleWeekStartDate]);
 
   function moveWeek(days: number) {
+    hasUserChangedWeekRef.current = true;
     setVisibleWeekStartDate((currentWeekStartDate) => addDaysToDate(currentWeekStartDate, days));
   }
 
   function moveToToday() {
+    hasUserChangedWeekRef.current = true;
     setVisibleWeekStartDate(getWeekStartDate(getLocalDateString(), 'monday'));
   }
 
@@ -78,15 +157,37 @@ export default function WeekScreen() {
       <View style={styles.weekDayList}>
         {visibleWeekDates.map((date, index) => {
           const isToday = date === todayDate;
+          const hasRecordedEntries = recordedDates.has(date);
 
           return (
-            <View key={date} style={[styles.dayCell, isToday && styles.todayCell]}>
+            <View
+              key={date}
+              accessibilityLabel={`${formatMonthDay(date)} ${WEEKDAY_LABELS[index]}${
+                shouldShowRecordStatus ? (hasRecordedEntries ? ' 기록 있음' : ' 기록 없음') : ''
+              }`}
+              style={[
+                styles.dayCell,
+                shouldShowRecordStatus && hasRecordedEntries && styles.recordedCell,
+                isToday && styles.todayCell,
+                shouldShowRecordStatus && hasRecordedEntries && isToday && styles.recordedTodayCell,
+              ]}
+            >
               <Text style={[styles.dayLabel, isToday && styles.todayLabel]}>
                 {WEEKDAY_LABELS[index]}
               </Text>
               <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
                 {formatDayNumber(date)}
               </Text>
+              {shouldShowRecordStatus && (
+                <View
+                  style={[
+                    styles.recordStatusIndicator,
+                    hasRecordedEntries
+                      ? styles.recordedStatusIndicator
+                      : styles.emptyStatusIndicator,
+                  ]}
+                />
+              )}
             </View>
           );
         })}
@@ -94,7 +195,9 @@ export default function WeekScreen() {
 
       <View style={styles.summaryPlaceholder}>
         <Text style={styles.summaryTitle}>주간 요약</Text>
-        <Text style={styles.summaryText}>아직 주간 기록이 없습니다.</Text>
+        <Text style={styles.summaryText}>
+          {formatWeekEntriesSummary(weekEntriesLoadState, recordedDates.size)}
+        </Text>
       </View>
     </Screen>
   );
@@ -129,6 +232,24 @@ function formatDayNumber(date: DateString): string {
   const [, , dayText] = date.split('-');
 
   return Number(dayText).toString();
+}
+
+function formatWeekEntriesSummary(state: WeekEntriesLoadState, recordedDateCount: number): string {
+  switch (state) {
+    case 'loading':
+      return '서버 기록을 확인하고 있습니다.';
+    case 'ready':
+      return recordedDateCount > 0
+        ? `이번 주 ${recordedDateCount}일에 기록이 있습니다.`
+        : '이번 주에는 아직 기록된 날짜가 없습니다.';
+    case 'unconfigured':
+      return '서버 연결 전이라 기록 여부를 표시하지 않습니다.';
+    case 'error':
+      return '기록 여부를 불러오지 못했습니다.';
+    case 'idle':
+    default:
+      return '기록 여부를 준비하고 있습니다.';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -230,6 +351,14 @@ const styles = StyleSheet.create({
     borderColor: theme.color.primary,
     backgroundColor: theme.color.surfaceMuted,
   },
+  recordedCell: {
+    borderColor: theme.color.accent,
+    backgroundColor: '#FFF7F1',
+  },
+  recordedTodayCell: {
+    borderColor: theme.color.primary,
+    backgroundColor: theme.color.surfaceMuted,
+  },
   dayLabel: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
@@ -245,6 +374,19 @@ const styles = StyleSheet.create({
   },
   todayNumber: {
     color: theme.color.primary,
+  },
+  recordStatusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  recordedStatusIndicator: {
+    backgroundColor: theme.color.accent,
+  },
+  emptyStatusIndicator: {
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    backgroundColor: theme.color.surface,
   },
   summaryPlaceholder: {
     gap: theme.spacing.sm,
