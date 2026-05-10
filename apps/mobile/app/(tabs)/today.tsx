@@ -24,6 +24,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
   type GestureResponderEvent,
@@ -42,6 +43,11 @@ import {
   type WeekGridSlotBounds,
   type WeekGridSlotPoint,
 } from '@/todayGridSelection';
+import {
+  createTimeRangeSelectionFromSlot,
+  createTimeRangeSelectionFromTimes,
+  expandTimeRangeSelection,
+} from '@/timeRangeSelection';
 import {
   createDailyEntryListItems,
   createDailySummary,
@@ -100,6 +106,9 @@ export default function TodayScreen() {
   const [confirmedSelection, setConfirmedSelection] = useState<WeekGridTimeRangeSelection | null>(
     null,
   );
+  const [timeInputStart, setTimeInputStart] = useState('');
+  const [timeInputEnd, setTimeInputEnd] = useState('');
+  const [timeInputError, setTimeInputError] = useState<string | null>(null);
   const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
@@ -119,6 +128,19 @@ export default function TodayScreen() {
     [blocks, selectionDraft],
   );
   const displayedSelection = draftSelection ?? confirmedSelection;
+  const canApplySelectedRange = confirmedSelection !== null && timeInputError === null;
+  const canMoveSelectionStartEarlier =
+    confirmedSelection !== null &&
+    expandTimeRangeSelection(blocks, confirmedSelection, 'start', -1) !== null;
+  const canMoveSelectionStartLater =
+    confirmedSelection !== null &&
+    expandTimeRangeSelection(blocks, confirmedSelection, 'start', 1) !== null;
+  const canMoveSelectionEndEarlier =
+    confirmedSelection !== null &&
+    expandTimeRangeSelection(blocks, confirmedSelection, 'end', -1) !== null;
+  const canMoveSelectionEndLater =
+    confirmedSelection !== null &&
+    expandTimeRangeSelection(blocks, confirmedSelection, 'end', 1) !== null;
   const selectedBlockPulseStyle = useMemo(
     () => ({
       opacity: selectionPulseValue.interpolate({
@@ -157,9 +179,22 @@ export default function TodayScreen() {
 
   useEffect(() => {
     setConfirmedSelection(null);
+    setTimeInputStart('');
+    setTimeInputEnd('');
+    setTimeInputError(null);
     selectionDraftRef.current = null;
     setSelectionDraft(null);
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!confirmedSelection) {
+      return;
+    }
+
+    setTimeInputStart(confirmedSelection.startTime);
+    setTimeInputEnd(confirmedSelection.endTime);
+    setTimeInputError(null);
+  }, [confirmedSelection]);
 
   useEffect(() => {
     const envStatus = getMobileSupabaseEnvStatus();
@@ -288,7 +323,7 @@ export default function TodayScreen() {
     isTouchActiveRef.current = false;
 
     if (!isSelectionGestureActiveRef.current) {
-      resetSelectionGesture();
+      finishTapSelectionAtPoint(releasePoint);
       return;
     }
 
@@ -375,6 +410,72 @@ export default function TodayScreen() {
 
   function clearConfirmedSelection() {
     setConfirmedSelection(null);
+    setTimeInputStart('');
+    setTimeInputEnd('');
+    setTimeInputError(null);
+  }
+
+  function finishTapSelectionAtPoint(releasePoint: WeekGridSlotPoint) {
+    const startPoint = selectionStartPointRef.current;
+
+    if (!startPoint || getPointDistance(startPoint, releasePoint) > LONG_PRESS_MOVE_TOLERANCE) {
+      resetSelectionGesture();
+      return;
+    }
+
+    const bounds = blockGridBoundsRef.current;
+
+    if (bounds) {
+      confirmSelectionAtPoint(releasePoint, bounds);
+      resetSelectionGesture();
+      return;
+    }
+
+    measureBlockGridBounds((measuredBounds) => {
+      confirmSelectionAtPoint(releasePoint, measuredBounds);
+      resetSelectionGesture();
+    });
+  }
+
+  function confirmSelectionAtPoint(point: WeekGridSlotPoint, bounds: WeekGridSlotBounds) {
+    const slotIndex = getSlotIndexFromPoint(point, bounds);
+
+    if (slotIndex === null) {
+      return;
+    }
+
+    const nextSelection = createTimeRangeSelectionFromSlot(blocks, slotIndex);
+
+    if (nextSelection) {
+      setConfirmedSelection(nextSelection);
+    }
+  }
+
+  function adjustConfirmedSelection(edge: 'start' | 'end', deltaSlots: number) {
+    if (!confirmedSelection) {
+      return;
+    }
+
+    const nextSelection = expandTimeRangeSelection(blocks, confirmedSelection, edge, deltaSlots);
+
+    if (nextSelection) {
+      setConfirmedSelection(nextSelection);
+    }
+  }
+
+  function updateTimeInput(nextStartTime: string, nextEndTime: string) {
+    setTimeInputStart(nextStartTime);
+    setTimeInputEnd(nextEndTime);
+
+    const result = createTimeRangeSelectionFromTimes(blocks, nextStartTime, nextEndTime);
+
+    if (result.isValid) {
+      setConfirmedSelection(result.selection);
+      setTimeInputError(null);
+      return;
+    }
+
+    setTimeInputError(result.errorMessage);
   }
 
   function measureBlockGridBounds(onMeasured?: (bounds: WeekGridSlotBounds) => void) {
@@ -685,18 +786,133 @@ export default function TodayScreen() {
                 ) : null}
               </View>
             </View>
+            <View style={styles.timeRangeEditor}>
+              <View style={styles.rangeStepperGrid}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canMoveSelectionStartEarlier}
+                  onPress={() => adjustConfirmedSelection('start', -1)}
+                  style={({ pressed }) => [
+                    styles.rangeStepperButton,
+                    !canMoveSelectionStartEarlier && styles.rangeStepperButtonDisabled,
+                    pressed && canMoveSelectionStartEarlier && styles.rangeStepperButtonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rangeStepperButtonText,
+                      !canMoveSelectionStartEarlier && styles.rangeStepperButtonTextDisabled,
+                    ]}
+                  >
+                    시작 -10분
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canMoveSelectionStartLater}
+                  onPress={() => adjustConfirmedSelection('start', 1)}
+                  style={({ pressed }) => [
+                    styles.rangeStepperButton,
+                    !canMoveSelectionStartLater && styles.rangeStepperButtonDisabled,
+                    pressed && canMoveSelectionStartLater && styles.rangeStepperButtonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rangeStepperButtonText,
+                      !canMoveSelectionStartLater && styles.rangeStepperButtonTextDisabled,
+                    ]}
+                  >
+                    시작 +10분
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canMoveSelectionEndEarlier}
+                  onPress={() => adjustConfirmedSelection('end', -1)}
+                  style={({ pressed }) => [
+                    styles.rangeStepperButton,
+                    !canMoveSelectionEndEarlier && styles.rangeStepperButtonDisabled,
+                    pressed && canMoveSelectionEndEarlier && styles.rangeStepperButtonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rangeStepperButtonText,
+                      !canMoveSelectionEndEarlier && styles.rangeStepperButtonTextDisabled,
+                    ]}
+                  >
+                    종료 -10분
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canMoveSelectionEndLater}
+                  onPress={() => adjustConfirmedSelection('end', 1)}
+                  style={({ pressed }) => [
+                    styles.rangeStepperButton,
+                    !canMoveSelectionEndLater && styles.rangeStepperButtonDisabled,
+                    pressed && canMoveSelectionEndLater && styles.rangeStepperButtonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rangeStepperButtonText,
+                      !canMoveSelectionEndLater && styles.rangeStepperButtonTextDisabled,
+                    ]}
+                  >
+                    종료 +10분
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.timeInputRow}>
+                <View style={styles.timeInputGroup}>
+                  <Text style={styles.timeInputLabel}>시작</Text>
+                  <TextInput
+                    accessibilityLabel="시작 시간 직접 입력"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                    onChangeText={(nextStartTime) => updateTimeInput(nextStartTime, timeInputEnd)}
+                    placeholder="HH:mm"
+                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
+                    value={timeInputStart}
+                  />
+                </View>
+                <View style={styles.timeInputGroup}>
+                  <Text style={styles.timeInputLabel}>종료</Text>
+                  <TextInput
+                    accessibilityLabel="종료 시간 직접 입력"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                    onChangeText={(nextEndTime) => updateTimeInput(timeInputStart, nextEndTime)}
+                    placeholder="HH:mm"
+                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
+                    value={timeInputEnd}
+                  />
+                </View>
+              </View>
+              {timeInputError ? <Text style={styles.timeInputError}>{timeInputError}</Text> : null}
+            </View>
             <View style={styles.categoryButtonList}>
               {EXAMPLE_CATEGORY_DEFINITIONS.map((category) => (
                 <Pressable
                   key={category.key}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: !canApplySelectedRange }}
+                  disabled={!canApplySelectedRange}
                   style={({ pressed }) => [
                     styles.categoryButton,
                     {
                       backgroundColor: category.color,
                       borderColor: category.color,
                     },
-                    pressed && styles.categoryButtonPressed,
+                    !canApplySelectedRange && styles.categoryButtonDisabled,
+                    pressed && canApplySelectedRange && styles.categoryButtonPressed,
                   ]}
                 >
                   <Text style={styles.categoryButtonText}>
@@ -1098,6 +1314,73 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: theme.spacing.xs,
   },
+  timeRangeEditor: {
+    gap: theme.spacing.md,
+  },
+  rangeStepperGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  rangeStepperButton: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  rangeStepperButtonPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  rangeStepperButtonDisabled: {
+    backgroundColor: theme.color.surfaceMuted,
+    opacity: 0.62,
+  },
+  rangeStepperButtonText: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  rangeStepperButtonTextDisabled: {
+    color: theme.color.textMuted,
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  timeInputGroup: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  timeInputLabel: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  timeInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+    paddingHorizontal: theme.spacing.md,
+  },
+  timeInputInvalid: {
+    borderColor: theme.color.danger,
+  },
+  timeInputError: {
+    color: theme.color.danger,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+  },
   categoryButtonList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1112,6 +1395,9 @@ const styles = StyleSheet.create({
   },
   categoryButtonPressed: {
     opacity: 0.82,
+  },
+  categoryButtonDisabled: {
+    opacity: 0.42,
   },
   categoryButtonText: {
     color: theme.color.surface,
