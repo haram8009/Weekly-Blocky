@@ -127,6 +127,7 @@ export type SyncState = {
 };
 
 export * from './defaults';
+export * from './csvExport';
 export * from './entryOverlap';
 export * from './photoMatcher';
 export * from './time';
