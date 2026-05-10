@@ -11,6 +11,7 @@ import {
 import { createEntityId, createWeekReviewId } from './ids';
 import { mapCategoryRow, mapTimeEntryRow, mapWeekReviewRow } from './mappers';
 import type {
+  ArchiveCategoryRepositoryInput,
   CreateCategoryRepositoryInput,
   CreateTimeEntryRepositoryInput,
   ListCategoriesOptions,
@@ -113,6 +114,36 @@ export class SupabaseCategoryRepository {
         'NOT_FOUND',
         '수정할 카테고리를 찾지 못했습니다. 서버 데이터를 새로고침한 뒤 다시 시도해주세요.',
         `Category not found: ${id}`,
+      );
+    }
+
+    return mapCategoryRow(data as SupabaseCategoryRow);
+  }
+
+  async archiveCategory(input: ArchiveCategoryRepositoryInput): Promise<Category> {
+    const userId = await requireCurrentUserId(this.client);
+    const now = input.now ?? new Date().toISOString();
+    const { data, error } = await this.client
+      .from('categories')
+      .update({
+        is_archived: true,
+        updated_at: now,
+      })
+      .eq('user_id', userId)
+      .eq('id', input.id)
+      .is('deleted_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    if (!data) {
+      throw new SupabaseStorageError(
+        'NOT_FOUND',
+        '보관할 카테고리를 찾지 못했습니다. 서버 데이터를 새로고침한 뒤 다시 시도해주세요.',
+        `Category not found: ${input.id}`,
       );
     }
 
@@ -369,6 +400,13 @@ export function updateCategory(
   input: UpdateCategoryRepositoryInput,
 ): Promise<Category> {
   return new SupabaseCategoryRepository(client).updateCategory(input);
+}
+
+export function archiveCategory(
+  client: SupabaseClient,
+  input: ArchiveCategoryRepositoryInput,
+): Promise<Category> {
+  return new SupabaseCategoryRepository(client).archiveCategory(input);
 }
 
 export function getWeekReviewByWeekStartDate(

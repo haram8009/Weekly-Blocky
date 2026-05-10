@@ -76,6 +76,13 @@ export type UpdateCategoryInput = {
 
 export type UpdateCategoryRepositoryInput = UpdateCategoryInput;
 
+export type ArchiveCategoryInput = {
+  id: EntityId;
+  now?: TimestampString;
+};
+
+export type ArchiveCategoryRepositoryInput = ArchiveCategoryInput;
+
 export type CreateTimeEntryInput = {
   id?: EntityId;
   date: DateString;
