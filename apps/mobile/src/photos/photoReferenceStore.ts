@@ -41,6 +41,13 @@ export type SyncDatePhotoReferencesInput = {
   now?: string;
 };
 
+export type UpdatePhotoReferenceVisibilityInput = {
+  userId: EntityId;
+  date: string;
+  photoId: EntityId;
+  now?: string;
+};
+
 export async function syncDatePhotoReferences({
   userId,
   date,
@@ -133,6 +140,52 @@ WHERE id = ? AND userId = ?
   const nextReferences = await listPhotoReferencesByDate(userId, date);
 
   await ensureLocalThumbnails(userId, nextReferences, now);
+
+  return listPhotoReferencesByDate(userId, date);
+}
+
+export async function hidePhotoReference({
+  userId,
+  date,
+  photoId,
+  now = new Date().toISOString(),
+}: UpdatePhotoReferenceVisibilityInput): Promise<PhotoReference[]> {
+  const database = await getLocalDatabase();
+
+  await initializeLocalDatabase(database);
+  await database.runAsync(
+    `
+UPDATE photoReferences
+SET entryId = NULL, matchType = 'manual', isHidden = 1, updatedAt = ?
+WHERE id = ? AND userId = ?
+`,
+    now,
+    photoId,
+    userId,
+  );
+
+  return listPhotoReferencesByDate(userId, date);
+}
+
+export async function unlinkPhotoReference({
+  userId,
+  date,
+  photoId,
+  now = new Date().toISOString(),
+}: UpdatePhotoReferenceVisibilityInput): Promise<PhotoReference[]> {
+  const database = await getLocalDatabase();
+
+  await initializeLocalDatabase(database);
+  await database.runAsync(
+    `
+UPDATE photoReferences
+SET entryId = NULL, matchType = 'manual', updatedAt = ?
+WHERE id = ? AND userId = ?
+`,
+    now,
+    photoId,
+    userId,
+  );
 
   return listPhotoReferencesByDate(userId, date);
 }

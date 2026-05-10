@@ -49,7 +49,11 @@ import {
 } from '@/lib/supabase/timeEntries';
 import type { DatePhotoAsset } from '@/photos/datePhotoAssets';
 import { listDatePhotoAssets } from '@/photos/mediaLibrary';
-import { syncDatePhotoReferences } from '@/photos/photoReferenceStore';
+import {
+  hidePhotoReference,
+  syncDatePhotoReferences,
+  unlinkPhotoReference,
+} from '@/photos/photoReferenceStore';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
@@ -88,6 +92,7 @@ type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'erro
 type DayPhotosLoadState = 'idle' | 'loading' | 'ready' | 'disabled' | 'permission-denied' | 'error';
 type EntrySaveState = 'idle' | 'saving' | 'error';
 type EntryEditSaveState = 'idle' | 'saving' | 'deleting' | 'error';
+type PhotoReferenceActionState = 'idle' | 'saving' | 'error';
 
 type EntryEditDraft = {
   id: string;
@@ -149,6 +154,11 @@ export default function TodayScreen() {
   const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
   const [editSaveState, setEditSaveState] = useState<EntryEditSaveState>('idle');
   const [editSaveErrorMessage, setEditSaveErrorMessage] = useState<string | null>(null);
+  const [photoReferenceActionState, setPhotoReferenceActionState] =
+    useState<PhotoReferenceActionState>('idle');
+  const [photoReferenceActionErrorMessage, setPhotoReferenceActionErrorMessage] = useState<
+    string | null
+  >(null);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const isTodaySelected = selectedDate === todayDate;
@@ -253,6 +263,8 @@ export default function TodayScreen() {
     setEditingEntryDraft(null);
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setPhotoReferenceActionState('idle');
+    setPhotoReferenceActionErrorMessage(null);
     setIsDeleteConfirmVisible(false);
     selectionDraftRef.current = null;
     setSelectionDraft(null);
@@ -706,6 +718,8 @@ export default function TodayScreen() {
     });
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setPhotoReferenceActionState('idle');
+    setPhotoReferenceActionErrorMessage(null);
     setIsDeleteConfirmVisible(false);
   }
 
@@ -713,6 +727,8 @@ export default function TodayScreen() {
     setEditingEntryDraft(null);
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setPhotoReferenceActionState('idle');
+    setPhotoReferenceActionErrorMessage(null);
     setIsDeleteConfirmVisible(false);
   }
 
@@ -723,6 +739,44 @@ export default function TodayScreen() {
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
     setIsDeleteConfirmVisible(false);
+  }
+
+  async function hideEditingPhotoReference(photoId: string) {
+    await updateEditingPhotoReference(photoId, 'hide');
+  }
+
+  async function unlinkEditingPhotoReference(photoId: string) {
+    await updateEditingPhotoReference(photoId, 'unlink');
+  }
+
+  async function updateEditingPhotoReference(photoId: string, action: 'hide' | 'unlink') {
+    if (photoReferenceActionState === 'saving') {
+      return;
+    }
+
+    if (!user) {
+      setPhotoReferenceActionState('error');
+      setPhotoReferenceActionErrorMessage('로그인 후 사진 상태를 변경할 수 있습니다.');
+      return;
+    }
+
+    setPhotoReferenceActionState('saving');
+    setPhotoReferenceActionErrorMessage(null);
+
+    try {
+      const nextReferences =
+        action === 'hide'
+          ? await hidePhotoReference({ userId: user.id, date: selectedDate, photoId })
+          : await unlinkPhotoReference({ userId: user.id, date: selectedDate, photoId });
+
+      setDayPhotoReferences(nextReferences);
+      setPhotoReferenceActionState('idle');
+    } catch (error) {
+      setPhotoReferenceActionState('error');
+      setPhotoReferenceActionErrorMessage(
+        error instanceof Error ? error.message : '사진 상태를 저장하지 못했습니다.',
+      );
+    }
   }
 
   async function saveEditedEntry() {
@@ -1414,8 +1468,18 @@ export default function TodayScreen() {
                       dayPhotosPermissionScope,
                       dayPhotosErrorMessage,
                       editingEntryPhotoReferences,
+                      photoReferenceActionState,
+                      hideEditingPhotoReference,
+                      unlinkEditingPhotoReference,
                     )}
                   </View>
+
+                  {photoReferenceActionState === 'saving' ? (
+                    <Text style={styles.categorySaveStatus}>사진 상태를 저장하고 있습니다.</Text>
+                  ) : null}
+                  {photoReferenceActionErrorMessage ? (
+                    <Text style={styles.categorySaveError}>{photoReferenceActionErrorMessage}</Text>
+                  ) : null}
 
                   {editValidationErrorMessage ? (
                     <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
@@ -1727,8 +1791,12 @@ function renderEntryPhotoReferenceList(
   permissionScope: string | null,
   errorMessage: string | null,
   references: readonly PhotoReference[],
+  actionState: PhotoReferenceActionState,
+  onHidePhoto: (photoId: string) => Promise<void>,
+  onUnlinkPhoto: (photoId: string) => Promise<void>,
 ) {
   const status = renderEntryPhotoLookupContent(state, photoCount, permissionScope, errorMessage);
+  const isActionDisabled = actionState === 'saving';
 
   if (state !== 'ready') {
     return status;
@@ -1767,6 +1835,37 @@ function renderEntryPhotoReferenceList(
             <Text style={styles.entryPhotoDetailTime}>
               {formatPhotoCapturedTime(reference.capturedAt)}
             </Text>
+            <View style={styles.entryPhotoActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isActionDisabled }}
+                disabled={isActionDisabled}
+                onPress={() => void onUnlinkPhoto(reference.id)}
+                style={({ pressed }) => [
+                  styles.entryPhotoActionButton,
+                  isActionDisabled && styles.entryPhotoActionButtonDisabled,
+                  pressed && !isActionDisabled && styles.entryPhotoActionButtonPressed,
+                ]}
+              >
+                <Text style={styles.entryPhotoActionButtonText}>연결 해제</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isActionDisabled }}
+                disabled={isActionDisabled}
+                onPress={() => void onHidePhoto(reference.id)}
+                style={({ pressed }) => [
+                  styles.entryPhotoActionButton,
+                  styles.entryPhotoHideButton,
+                  isActionDisabled && styles.entryPhotoActionButtonDisabled,
+                  pressed && !isActionDisabled && styles.entryPhotoActionButtonPressed,
+                ]}
+              >
+                <Text style={[styles.entryPhotoActionButtonText, styles.entryPhotoHideButtonText]}>
+                  숨김
+                </Text>
+              </Pressable>
+            </View>
           </View>
         ))}
       </ScrollView>
@@ -2259,18 +2358,18 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.md,
   },
   entryPhotoDetailItem: {
-    width: 88,
+    width: 112,
     gap: theme.spacing.xs,
   },
   entryPhotoDetailImage: {
-    width: 88,
-    height: 88,
+    width: 112,
+    height: 112,
     borderRadius: theme.radius.md,
     backgroundColor: theme.color.surfaceMuted,
   },
   entryPhotoDetailFallback: {
-    width: 88,
-    height: 88,
+    width: 112,
+    height: 112,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -2288,6 +2387,38 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  entryPhotoActionRow: {
+    gap: theme.spacing.xs,
+  },
+  entryPhotoActionButton: {
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.color.surface,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  entryPhotoActionButtonPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  entryPhotoActionButtonDisabled: {
+    opacity: 0.48,
+  },
+  entryPhotoActionButtonText: {
+    color: theme.color.text,
+    flexShrink: 1,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  entryPhotoHideButton: {
+    borderColor: theme.color.danger,
+  },
+  entryPhotoHideButtonText: {
+    color: theme.color.danger,
   },
   drawerOverlay: {
     flex: 1,

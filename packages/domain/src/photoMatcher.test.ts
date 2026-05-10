@@ -119,4 +119,16 @@ describe('resolvePhotoMatches', () => {
       { photoId: 'manual-photo', entryId: 'entry-1', matchType: 'manual' },
     ]);
   });
+
+  it('preserves manually unlinked photos without rematching them automatically', () => {
+    const result = resolvePhotoMatches(
+      [baseEntry],
+      [createPhoto({ id: 'manual-unlinked', entryId: null, matchType: 'manual' })],
+    );
+
+    expect(result.matches).toEqual([]);
+    expect(result.updates).toEqual([
+      { photoId: 'manual-unlinked', entryId: null, matchType: 'manual' },
+    ]);
+  });
 });

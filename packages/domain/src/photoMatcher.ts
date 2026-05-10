@@ -58,8 +58,11 @@ export function resolvePhotoMatches(
       continue;
     }
 
-    if (photo.matchType === 'manual' && photo.entryId) {
-      addPhotoMatch(photoIdsByEntryId, photo.entryId, photo.id);
+    if (photo.matchType === 'manual') {
+      if (photo.entryId) {
+        addPhotoMatch(photoIdsByEntryId, photo.entryId, photo.id);
+      }
+
       updates.push({
         photoId: photo.id,
         entryId: photo.entryId,
