@@ -5,7 +5,7 @@ import { theme } from '@/theme';
 export default function TabLayout() {
   return (
     <Tabs
-      initialRouteName="week"
+      initialRouteName="today"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.color.primary,
@@ -20,8 +20,8 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen name="week" options={{ title: '주간' }} />
       <Tabs.Screen name="today" options={{ title: '오늘' }} />
+      <Tabs.Screen name="week" options={{ title: '주간' }} />
       <Tabs.Screen name="review" options={{ title: '회고' }} />
       <Tabs.Screen name="settings" options={{ title: '설정' }} />
     </Tabs>

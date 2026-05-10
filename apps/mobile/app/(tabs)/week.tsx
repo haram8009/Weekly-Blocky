@@ -1,4 +1,4 @@
-import { addDaysToDate, buildWeekGrid, getWeekStartDate, type DateString } from '@weekly/domain';
+import { addDaysToDate, getDatesOfWeek, getWeekStartDate, type DateString } from '@weekly/domain';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -12,12 +12,10 @@ export default function WeekScreen() {
   const todayDate = getLocalDateString();
   const todayWeekStartDate = getWeekStartDate(todayDate, 'monday');
   const [visibleWeekStartDate, setVisibleWeekStartDate] = useState<DateString>(todayWeekStartDate);
-  const [useFullDayView, setUseFullDayView] = useState(false);
-  const weekGrid = useMemo(
-    () => buildWeekGrid({ weekStartDate: visibleWeekStartDate, useFullDayView }),
-    [useFullDayView, visibleWeekStartDate],
+  const visibleWeekDates = useMemo(
+    () => getDatesOfWeek(visibleWeekStartDate),
+    [visibleWeekStartDate],
   );
-  const visibleWeekDates = weekGrid.dates;
   const isCurrentWeek = visibleWeekStartDate === todayWeekStartDate;
 
   function moveWeek(days: number) {
@@ -94,53 +92,9 @@ export default function WeekScreen() {
         })}
       </View>
 
-      <View style={styles.viewModeGroup} accessibilityRole="tablist">
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: !useFullDayView }}
-          onPress={() => setUseFullDayView(false)}
-          style={({ pressed }) => [
-            styles.viewModeButton,
-            !useFullDayView && styles.viewModeButtonSelected,
-            pressed && styles.viewModeButtonPressed,
-          ]}
-        >
-          <Text
-            style={[
-              styles.viewModeButtonText,
-              !useFullDayView && styles.viewModeButtonTextSelected,
-            ]}
-          >
-            기본
-          </Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: useFullDayView }}
-          onPress={() => setUseFullDayView(true)}
-          style={({ pressed }) => [
-            styles.viewModeButton,
-            useFullDayView && styles.viewModeButtonSelected,
-            pressed && styles.viewModeButtonPressed,
-          ]}
-        >
-          <Text
-            style={[styles.viewModeButtonText, useFullDayView && styles.viewModeButtonTextSelected]}
-          >
-            전체
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.gridPlaceholder}>
-        <Text style={styles.placeholderTitle}>
-          {weekGrid.dates.length}일 x 하루 {weekGrid.blocksPerDay}개 블록
-        </Text>
-        <Text style={styles.placeholderText}>
-          {weekGrid.visibleStartTime}-{weekGrid.visibleEndTime} 기준 총 {weekGrid.totalBlockCount}개
-          그리드 데이터가 생성되었습니다.
-        </Text>
+      <View style={styles.summaryPlaceholder}>
+        <Text style={styles.summaryTitle}>주간 요약</Text>
+        <Text style={styles.summaryText}>아직 주간 기록이 없습니다.</Text>
       </View>
     </Screen>
   );
@@ -292,40 +246,7 @@ const styles = StyleSheet.create({
   todayNumber: {
     color: theme.color.primary,
   },
-  viewModeGroup: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    marginBottom: theme.spacing.lg,
-    padding: theme.spacing.xs,
-  },
-  viewModeButton: {
-    flex: 1,
-    minHeight: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radius.sm,
-  },
-  viewModeButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  viewModeButtonSelected: {
-    backgroundColor: theme.color.primary,
-  },
-  viewModeButtonText: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-  },
-  viewModeButtonTextSelected: {
-    color: theme.color.surface,
-  },
-  gridPlaceholder: {
-    minHeight: 360,
-    justifyContent: 'center',
+  summaryPlaceholder: {
     gap: theme.spacing.sm,
     borderWidth: 1,
     borderColor: theme.color.border,
@@ -333,16 +254,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.surface,
     padding: theme.spacing.lg,
   },
-  placeholderTitle: {
+  summaryTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
     fontWeight: '800',
-    textAlign: 'center',
   },
-  placeholderText: {
+  summaryText: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
-    textAlign: 'center',
   },
 });
