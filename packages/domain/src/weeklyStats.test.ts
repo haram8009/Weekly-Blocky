@@ -168,6 +168,57 @@ describe('createWeeklyStats', () => {
     expect(stats.completionRate).toBe(14);
   });
 
+  it('groups totals by repeated category name and emoji keys', () => {
+    const stats = createWeeklyStats({
+      weekStartDate: '2026-05-04',
+      categories: [
+        ...categories,
+        {
+          id: 'deep-work',
+          name: '주요 업무',
+          emoji: '💼',
+          color: '#14B8A6',
+        },
+      ],
+      entries: [
+        {
+          date: '2026-05-04',
+          startTime: '09:00',
+          endTime: '10:00',
+          categoryId: 'work',
+          deletedAt: null,
+        },
+        {
+          date: '2026-05-05',
+          startTime: '10:00',
+          endTime: '11:30',
+          categoryId: 'deep-work',
+          deletedAt: null,
+        },
+        {
+          date: '2026-05-06',
+          startTime: '12:00',
+          endTime: '12:30',
+          categoryId: 'meeting',
+          deletedAt: null,
+        },
+      ],
+    });
+
+    expect(stats.totalsByName.find((total) => total.key === '주요 업무')).toMatchObject({
+      minutes: 150,
+      ratio: 83,
+    });
+    expect(stats.totalsByEmoji.find((total) => total.key === '💼')).toMatchObject({
+      minutes: 150,
+      ratio: 83,
+    });
+    expect(stats.totalsByColor.map(({ key, minutes }) => ({ key, minutes }))).toEqual([
+      { key: '#14B8A6', minutes: 90 },
+      { key: '#2563EB', minutes: 90 },
+    ]);
+  });
+
   it('groups unknown categories under a fallback label', () => {
     const stats = createWeeklyStats({
       weekStartDate: '2026-05-04',
