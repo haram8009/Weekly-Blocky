@@ -3,15 +3,15 @@
 import {
   addDaysToDate,
   buildWeekGrid,
+  createWeeklyStats,
   getWeekStartDate,
-  parseTimeToMinutes,
-  WEEK_GRID_SLOT_MINUTES,
   type Category,
   type DateString,
   type PhotoReference,
   type TimeEntry,
   type WeekGridBlock,
   type WeekReview,
+  type WeeklyStatsTotal,
 } from '@weekly/domain';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
@@ -23,34 +23,12 @@ import { getWebWeekReviewByWeekStartDate, upsertWebWeekReview } from '@/lib/supa
 import styles from './page.module.css';
 
 const days = ['월', '화', '수', '목', '금', '토', '일'];
-const WASTED_TIME_CATEGORY_NAME = '낭비한 시간';
-const FALLBACK_CATEGORY = {
-  name: '카테고리 없음',
-  emoji: '•',
-  color: '#64748B',
-};
 
 type WeekLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type ReviewLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type ReviewSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type WeekSummaryMode = 'color' | 'name' | 'emoji';
 type ReviewDraft = Pick<WeekReview, 'summary' | 'wins' | 'problems' | 'nextWeekFocus'>;
-type WeekSummaryTotal = {
-  key: string;
-  label: string;
-  color: string;
-  minutes: number;
-  ratio: number;
-  isWaste: boolean;
-};
-type WeeklySummary = {
-  recordedMinutes: number;
-  visibleMinutes: number;
-  unrecordedMinutes: number;
-  completionRate: number;
-  wastedMinutes: number;
-  totalsByMode: Record<WeekSummaryMode, WeekSummaryTotal[]>;
-};
 
 export default function WeekPage() {
   const todayDate = getLocalDateString();
@@ -85,10 +63,23 @@ export default function WeekPage() {
     [photoReferences],
   );
   const weeklySummary = useMemo(
-    () => createWeeklySummary(visibleEntries, categories, weekGrid),
-    [categories, visibleEntries, weekGrid],
+    () =>
+      createWeeklyStats({
+        entries: visibleEntries,
+        categories,
+        weekStartDate: visibleWeekStartDate,
+        visibleStartTime: weekGrid.visibleStartTime,
+        visibleEndTime: weekGrid.visibleEndTime,
+      }),
+    [
+      categories,
+      visibleEntries,
+      visibleWeekStartDate,
+      weekGrid.visibleEndTime,
+      weekGrid.visibleStartTime,
+    ],
   );
-  const selectedTotals = weeklySummary.totalsByMode[summaryMode];
+  const selectedTotals = getWeeklySummaryTotals(weeklySummary, summaryMode);
   const latestSavedAtLabel = weekReview ? formatDateTime(weekReview.updatedAt) : '아직 저장 전';
 
   const loadWeekReview = useCallback((weekStartDate: DateString) => {
@@ -533,7 +524,22 @@ function groupRemotePhotoReferencesByEntryId(
   return referencesByEntryId;
 }
 
-function SummaryTotals({ totals }: { totals: readonly WeekSummaryTotal[] }) {
+function getWeeklySummaryTotals(
+  weeklySummary: ReturnType<typeof createWeeklyStats>,
+  mode: WeekSummaryMode,
+): readonly WeeklyStatsTotal[] {
+  switch (mode) {
+    case 'color':
+      return weeklySummary.totalsByColor;
+    case 'emoji':
+      return weeklySummary.totalsByEmoji;
+    case 'name':
+    default:
+      return weeklySummary.totalsByName;
+  }
+}
+
+function SummaryTotals({ totals }: { totals: readonly WeeklyStatsTotal[] }) {
   return (
     <ul className={styles.totalList}>
       {totals.map((total) => (
@@ -562,134 +568,6 @@ function getEntryCoveringBlock(
         entry.endTime >= block.endTime,
     ) ?? null
   );
-}
-
-function getEntryDurationMinutes(startTime: string, endTime: string): number {
-  try {
-    return Math.max(parseTimeToMinutes(endTime) - parseTimeToMinutes(startTime), 0);
-  } catch {
-    return 0;
-  }
-}
-
-function createWeeklySummary(
-  entries: readonly TimeEntry[],
-  categories: readonly Category[],
-  weekGrid: ReturnType<typeof buildWeekGrid>,
-): WeeklySummary {
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
-  const totalsByColor = new Map<string, Omit<WeekSummaryTotal, 'ratio'>>();
-  const totalsByName = new Map<string, Omit<WeekSummaryTotal, 'ratio'>>();
-  const totalsByEmoji = new Map<string, Omit<WeekSummaryTotal, 'ratio'>>();
-  let recordedMinutes = 0;
-  let wastedMinutes = 0;
-
-  for (const entry of entries) {
-    const minutes = getEntryVisibleDurationMinutes(entry, weekGrid);
-
-    if (minutes === 0) {
-      continue;
-    }
-
-    const category = categoryById.get(entry.categoryId) ?? FALLBACK_CATEGORY;
-    const isWaste = category.name === WASTED_TIME_CATEGORY_NAME;
-
-    recordedMinutes += minutes;
-
-    if (isWaste) {
-      wastedMinutes += minutes;
-    }
-
-    addSummaryTotal(totalsByName, category.name, category.name, category.color, minutes, isWaste);
-    addSummaryTotal(
-      totalsByColor,
-      category.color,
-      category.color,
-      category.color,
-      minutes,
-      isWaste,
-    );
-    addSummaryTotal(
-      totalsByEmoji,
-      category.emoji,
-      category.emoji,
-      category.color,
-      minutes,
-      isWaste,
-    );
-  }
-
-  const visibleMinutes = weekGrid.totalBlockCount * WEEK_GRID_SLOT_MINUTES;
-
-  return {
-    recordedMinutes,
-    visibleMinutes,
-    unrecordedMinutes: Math.max(visibleMinutes - recordedMinutes, 0),
-    completionRate:
-      visibleMinutes > 0 ? Math.min(Math.round((recordedMinutes / visibleMinutes) * 100), 100) : 0,
-    wastedMinutes,
-    totalsByMode: {
-      color: sortSummaryTotals(totalsByColor, recordedMinutes),
-      name: sortSummaryTotals(totalsByName, recordedMinutes),
-      emoji: sortSummaryTotals(totalsByEmoji, recordedMinutes),
-    },
-  };
-}
-
-function addSummaryTotal(
-  totals: Map<string, Omit<WeekSummaryTotal, 'ratio'>>,
-  key: string,
-  label: string,
-  color: string,
-  minutes: number,
-  isWaste: boolean,
-) {
-  const current = totals.get(key);
-
-  totals.set(key, {
-    key,
-    label,
-    color,
-    minutes: (current?.minutes ?? 0) + minutes,
-    isWaste: Boolean(current?.isWaste || isWaste),
-  });
-}
-
-function sortSummaryTotals(
-  totals: Map<string, Omit<WeekSummaryTotal, 'ratio'>>,
-  recordedMinutes: number,
-): WeekSummaryTotal[] {
-  return [...totals.values()]
-    .map((total) => ({
-      ...total,
-      ratio: recordedMinutes > 0 ? Math.round((total.minutes / recordedMinutes) * 100) : 0,
-    }))
-    .sort(
-      (first, second) => second.minutes - first.minutes || first.label.localeCompare(second.label),
-    );
-}
-
-function getEntryVisibleDurationMinutes(
-  entry: TimeEntry,
-  weekGrid: ReturnType<typeof buildWeekGrid>,
-): number {
-  if (!weekGrid.dates.includes(entry.date)) {
-    return 0;
-  }
-
-  try {
-    const startMinutes = parseTimeToMinutes(entry.startTime);
-    const endMinutes = parseTimeToMinutes(entry.endTime);
-    const visibleStartMinutes = parseTimeToMinutes(weekGrid.visibleStartTime);
-    const visibleEndMinutes = parseTimeToMinutes(weekGrid.visibleEndTime);
-
-    return Math.max(
-      Math.min(endMinutes, visibleEndMinutes) - Math.max(startMinutes, visibleStartMinutes),
-      0,
-    );
-  } catch {
-    return 0;
-  }
 }
 
 function formatDuration(minutes: number): string {
