@@ -81,6 +81,12 @@ ON CONFLICT(id) DO UPDATE SET
   capturedAt = excluded.capturedAt,
   localAssetId = excluded.localAssetId,
   localUri = excluded.localUri,
+  thumbnailLocalUri = CASE
+    WHEN photoReferences.localUri = excluded.localUri
+      OR (photoReferences.localUri IS NULL AND excluded.localUri IS NULL)
+    THEN photoReferences.thumbnailLocalUri
+    ELSE NULL
+  END,
   width = excluded.width,
   height = excluded.height,
   mediaType = excluded.mediaType,

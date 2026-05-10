@@ -9,6 +9,7 @@ import {
   WEEK_GRID_SLOT_MINUTES,
   type Category,
   type DateString,
+  type PhotoReference,
   type TimeEntry,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
@@ -19,6 +20,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   Modal,
   PanResponder,
   Pressable,
@@ -75,6 +77,7 @@ const LONG_PRESS_SELECTION_DELAY_MS = 300;
 const LONG_PRESS_MOVE_TOLERANCE = 8;
 const EDGE_AUTO_SCROLL_THRESHOLD = 80;
 const EDGE_AUTO_SCROLL_MAX_STEP = 12;
+const MAX_ENTRY_THUMBNAILS = 3;
 
 type SelectionDraft = {
   anchorSlotIndex: number;
@@ -137,6 +140,7 @@ export default function TodayScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
   const [dayPhotos, setDayPhotos] = useState<DatePhotoAsset[]>([]);
+  const [dayPhotoReferences, setDayPhotoReferences] = useState<PhotoReference[]>([]);
   const [dayPhotosLoadState, setDayPhotosLoadState] = useState<DayPhotosLoadState>('idle');
   const [dayPhotosPermissionScope, setDayPhotosPermissionScope] = useState<string | null>(null);
   const [dayPhotosErrorMessage, setDayPhotosErrorMessage] = useState<string | null>(null);
@@ -165,6 +169,10 @@ export default function TodayScreen() {
     () => createCategoryPaletteItems(categories, dayEntries),
     [categories, dayEntries],
   );
+  const photoReferencesByEntryId = useMemo(
+    () => groupVisiblePhotoReferencesByEntryId(dayPhotoReferences),
+    [dayPhotoReferences],
+  );
   const draftSelection = useMemo(
     () => createSelectedRange(blocks, selectionDraft),
     [blocks, selectionDraft],
@@ -184,6 +192,9 @@ export default function TodayScreen() {
     editSaveState !== 'saving' &&
     editSaveState !== 'deleting';
   const canDeleteEditedEntry = editingEntryDraft !== null && editSaveState !== 'deleting';
+  const editingEntryPhotoReferences = editingEntryDraft
+    ? (photoReferencesByEntryId.get(editingEntryDraft.id) ?? [])
+    : [];
   const canMoveSelectionStartEarlier =
     confirmedSelection !== null &&
     expandTimeRangeSelection(blocks, confirmedSelection, 'start', -1) !== null;
@@ -303,6 +314,7 @@ export default function TodayScreen() {
     let isActive = true;
 
     setDayPhotos([]);
+    setDayPhotoReferences([]);
     setDayPhotosPermissionScope(null);
     setDayPhotosErrorMessage(null);
 
@@ -380,16 +392,25 @@ export default function TodayScreen() {
       date: selectedDate,
       assets: dayPhotos,
       entries: dayEntries,
-    }).catch((error) => {
-      if (!isActive) {
-        return;
-      }
+    })
+      .then((references) => {
+        if (!isActive) {
+          return;
+        }
 
-      setDayPhotosLoadState('error');
-      setDayPhotosErrorMessage(
-        error instanceof Error ? error.message : '사진 참조를 저장하지 못했습니다.',
-      );
-    });
+        setDayPhotoReferences(references);
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setDayPhotoReferences([]);
+        setDayPhotosLoadState('error');
+        setDayPhotosErrorMessage(
+          error instanceof Error ? error.message : '사진 참조를 저장하지 못했습니다.',
+        );
+      });
 
     return () => {
       isActive = false;
@@ -1055,6 +1076,10 @@ export default function TodayScreen() {
                   const blockEntry = getEntryCoveringBlock(block, dayEntries);
                   const blockCategory = blockEntry ? categoryById.get(blockEntry.categoryId) : null;
                   const isSelected = isBlockSelected(block.slotIndex, displayedSelection);
+                  const blockPhotoReferences =
+                    blockEntry && block.startTime === blockEntry.startTime
+                      ? (photoReferencesByEntryId.get(blockEntry.id) ?? [])
+                      : [];
 
                   return (
                     <View key={block.id} style={styles.blockContainer}>
@@ -1068,7 +1093,9 @@ export default function TodayScreen() {
                           isSelected && styles.selectedBlock,
                           isSelected && selectedBlockPulseStyle,
                         ]}
-                      />
+                      >
+                        {renderBlockPhotoIndicator(blockPhotoReferences)}
+                      </Animated.View>
                     </View>
                   );
                 })}
@@ -1084,7 +1111,12 @@ export default function TodayScreen() {
           <Text style={styles.entryListCount}>{dailySummary.entryCount}개</Text>
         </View>
 
-        {renderEntryListContent(dayEntriesLoadState, dailyEntryItems, openEntryEditorById)}
+        {renderEntryListContent(
+          dayEntriesLoadState,
+          dailyEntryItems,
+          photoReferencesByEntryId,
+          openEntryEditorById,
+        )}
       </View>
 
       <Modal
@@ -1376,11 +1408,12 @@ export default function TodayScreen() {
 
                   <View style={styles.editFieldGroup}>
                     <Text style={styles.timeInputLabel}>사진</Text>
-                    {renderEntryPhotoLookupContent(
+                    {renderEntryPhotoReferenceList(
                       dayPhotosLoadState,
                       dayPhotos.length,
                       dayPhotosPermissionScope,
                       dayPhotosErrorMessage,
+                      editingEntryPhotoReferences,
                     )}
                   </View>
 
@@ -1688,9 +1721,77 @@ function renderEntryPhotoLookupContent(
   );
 }
 
+function renderEntryPhotoReferenceList(
+  state: DayPhotosLoadState,
+  photoCount: number,
+  permissionScope: string | null,
+  errorMessage: string | null,
+  references: readonly PhotoReference[],
+) {
+  const status = renderEntryPhotoLookupContent(state, photoCount, permissionScope, errorMessage);
+
+  if (state !== 'ready') {
+    return status;
+  }
+
+  if (references.length === 0) {
+    return (
+      <View style={styles.entryPhotoDetailBox}>
+        {status}
+        <Text style={styles.entryPhotoEmptyText}>이 기록 시간대에 연결된 사진이 없습니다.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.entryPhotoDetailBox}>
+      {status}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.entryPhotoDetailList}
+      >
+        {references.map((reference, index) => (
+          <View key={reference.id} style={styles.entryPhotoDetailItem}>
+            {reference.thumbnailLocalUri ? (
+              <Image
+                accessibilityLabel={`연결 사진 ${index + 1}`}
+                source={{ uri: reference.thumbnailLocalUri }}
+                style={styles.entryPhotoDetailImage}
+              />
+            ) : (
+              <View style={styles.entryPhotoDetailFallback}>
+                <Text style={styles.entryPhotoDetailFallbackText}>사진</Text>
+              </View>
+            )}
+            <Text style={styles.entryPhotoDetailTime}>
+              {formatPhotoCapturedTime(reference.capturedAt)}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function renderBlockPhotoIndicator(references: readonly PhotoReference[]) {
+  if (references.length === 0) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="none" style={styles.blockPhotoIndicator}>
+      <Text style={styles.blockPhotoIndicatorText}>
+        {formatCompactPhotoCount(references.length)}
+      </Text>
+    </View>
+  );
+}
+
 function renderEntryListContent(
   state: DayEntriesLoadState,
   items: readonly DailyEntryListItem[],
+  photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>,
   onEntryPress: (entryId: string) => void,
 ) {
   if (state === 'loading' || state === 'idle') {
@@ -1713,28 +1814,81 @@ function renderEntryListContent(
 
   return (
     <View style={styles.entryCardList}>
-      {items.map((item) => (
-        <Pressable
-          key={item.id}
-          accessibilityRole="button"
-          onPress={() => onEntryPress(item.id)}
-          style={({ pressed }) => [styles.entryCard, pressed && styles.entryCardPressed]}
-        >
-          <View style={[styles.entryColorBar, { backgroundColor: item.categoryColor }]} />
-          <View style={styles.entryCardBody}>
-            <View style={styles.entryCardHeader}>
-              <Text style={styles.entryTime}>{item.timeRangeLabel}</Text>
-              <Text style={styles.entryDuration}>{formatDuration(item.durationMinutes)}</Text>
+      {items.map((item) => {
+        const references = photoReferencesByEntryId.get(item.id) ?? [];
+
+        return (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            onPress={() => onEntryPress(item.id)}
+            style={({ pressed }) => [styles.entryCard, pressed && styles.entryCardPressed]}
+          >
+            <View style={[styles.entryColorBar, { backgroundColor: item.categoryColor }]} />
+            <View style={styles.entryCardBody}>
+              <View style={styles.entryCardHeader}>
+                <Text style={styles.entryTime}>{item.timeRangeLabel}</Text>
+                <Text style={styles.entryDuration}>{formatDuration(item.durationMinutes)}</Text>
+              </View>
+              <Text style={styles.entryCategory}>
+                {item.categoryEmoji} {item.categoryName}
+              </Text>
+              {item.note ? <Text style={styles.entryNote}>{item.note}</Text> : null}
+              {renderEntryPhotoPreview(references)}
             </View>
-            <Text style={styles.entryCategory}>
-              {item.categoryEmoji} {item.categoryName}
-            </Text>
-            {item.note ? <Text style={styles.entryNote}>{item.note}</Text> : null}
-          </View>
-        </Pressable>
-      ))}
+          </Pressable>
+        );
+      })}
     </View>
   );
+}
+
+function renderEntryPhotoPreview(references: readonly PhotoReference[]) {
+  if (references.length === 0) {
+    return null;
+  }
+
+  const thumbnailReferences = references
+    .filter((reference) => reference.thumbnailLocalUri)
+    .slice(0, MAX_ENTRY_THUMBNAILS);
+  const remainingCount = references.length - thumbnailReferences.length;
+
+  return (
+    <View style={styles.entryPhotoPreviewRow}>
+      {thumbnailReferences.map((reference, index) => (
+        <Image
+          key={reference.id}
+          accessibilityLabel={`기록 사진 썸네일 ${index + 1}`}
+          source={{ uri: reference.thumbnailLocalUri ?? '' }}
+          style={styles.entryPhotoPreviewImage}
+        />
+      ))}
+      {thumbnailReferences.length === 0 ? (
+        <Text style={styles.entryPhotoCountBadge}>사진 {references.length}개</Text>
+      ) : null}
+      {remainingCount > 0 ? (
+        <Text style={styles.entryPhotoCountBadge}>+{remainingCount}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function groupVisiblePhotoReferencesByEntryId(
+  references: readonly PhotoReference[],
+): Map<string, PhotoReference[]> {
+  const referencesByEntryId = new Map<string, PhotoReference[]>();
+
+  for (const reference of references) {
+    if (!reference.entryId || reference.isHidden || reference.deletedAt) {
+      continue;
+    }
+
+    const currentReferences = referencesByEntryId.get(reference.entryId) ?? [];
+    currentReferences.push(reference);
+    referencesByEntryId.set(reference.entryId, currentReferences);
+  }
+
+  return referencesByEntryId;
 }
 
 function getLocalDateString(date = new Date()): DateString {
@@ -1763,6 +1917,16 @@ function formatDayPhotoSummary(state: DayPhotosLoadState, photoCount: number): s
   }
 
   return `${photoCount}개`;
+}
+
+function formatCompactPhotoCount(photoCount: number): string {
+  return photoCount > 9 ? '9+' : String(photoCount);
+}
+
+function formatPhotoCapturedTime(capturedAt: string): string {
+  const timeText = capturedAt.includes('T') ? capturedAt.split('T')[1]?.slice(0, 5) : null;
+
+  return timeText && /^\d{2}:\d{2}$/.test(timeText) ? timeText : '시간 미상';
 }
 
 function formatMonthDay(date: DateString): string {
@@ -1938,6 +2102,25 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: 2,
     backgroundColor: theme.color.surfaceMuted,
+    overflow: 'hidden',
+  },
+  blockPhotoIndicator: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    minWidth: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 3,
+  },
+  blockPhotoIndicatorText: {
+    color: theme.color.text,
+    fontSize: 8,
+    fontWeight: '900',
+    lineHeight: 10,
   },
   selectedBlock: {
     backgroundColor: theme.color.accent,
@@ -2023,6 +2206,32 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     lineHeight: 20,
   },
+  entryPhotoPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  entryPhotoPreviewImage: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  entryPhotoCountBadge: {
+    minHeight: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.color.surfaceMuted,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 26,
+    paddingHorizontal: theme.spacing.sm,
+  },
   entryPhotoStatus: {
     borderWidth: 1,
     borderColor: theme.color.border,
@@ -2036,6 +2245,49 @@ const styles = StyleSheet.create({
   entryPhotoStatusError: {
     borderColor: theme.color.danger,
     color: theme.color.danger,
+  },
+  entryPhotoDetailBox: {
+    gap: theme.spacing.sm,
+  },
+  entryPhotoEmptyText: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+  },
+  entryPhotoDetailList: {
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.md,
+  },
+  entryPhotoDetailItem: {
+    width: 88,
+    gap: theme.spacing.xs,
+  },
+  entryPhotoDetailImage: {
+    width: 88,
+    height: 88,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  entryPhotoDetailFallback: {
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  entryPhotoDetailFallbackText: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  entryPhotoDetailTime: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   drawerOverlay: {
     flex: 1,
