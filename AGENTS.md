@@ -54,6 +54,7 @@
 ## Git 규칙
 
 - 사용자가 명시적으로 요청하기 전에는 commit, push, PR 생성을 하지 않는다.
+- GitHub PR 병렬 자동화, worktree 기반 sub-agent 운영, supervisor review/merge 절차는 `docs/github/README.md`를 따른다.
 - 커밋 전에는 `git status --short`로 변경 범위를 확인한다.
 - 작업과 무관한 파일은 stage하지 않는다.
 - 사용자가 만든 변경을 되돌리지 않는다.
