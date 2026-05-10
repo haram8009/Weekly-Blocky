@@ -652,8 +652,8 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 ### 3. CSV 내보내기
 
-- [ ] 현재 주 CSV 내보내기
-- [ ] 전체 기록 CSV 내보내기
+- [x] 현재 주 CSV 내보내기
+- [x] 전체 기록 CSV 내보내기
 - [x] 필드 순서 정의: `date,startTime,endTime,durationMinutes,categoryName,categoryColor,categoryEmoji,note,source,photoCount,createdAt,updatedAt`
 - [x] 날짜, 시작 시간 기준 정렬
 - [x] UTF-8 BOM 추가

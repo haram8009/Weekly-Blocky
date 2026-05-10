@@ -1,6 +1,6 @@
 'use client';
 
-import { getSupabaseStorageErrorMessage } from '@weekly/data';
+import { getSupabaseStorageErrorMessage, SupabaseStorageError } from '@weekly/data';
 import {
   addDaysToDate,
   buildWeekGrid,
@@ -17,9 +17,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { AppShell } from '@/components/AppShell';
+import { createWebTimeEntriesCsv } from '@/lib/timeEntriesCsv';
 import { listWebCategories } from '@/lib/supabase/categories';
-import { listWebPhotoReferencesByWeek } from '@/lib/supabase/photoReferences';
-import { listWebTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
+import {
+  listWebPhotoReferenceCountsByEntryIds,
+  listWebPhotoReferencesByWeek,
+} from '@/lib/supabase/photoReferences';
+import { listWebTimeEntries, listWebTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
 import { getWebWeekReviewByWeekStartDate, upsertWebWeekReview } from '@/lib/supabase/weekReviews';
 import styles from './page.module.css';
 
@@ -28,6 +32,7 @@ const days = ['월', '화', '수', '목', '금', '토', '일'];
 type WeekLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type ReviewLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type ReviewSaveState = 'idle' | 'saving' | 'saved' | 'error';
+type CsvExportState = 'idle' | 'week' | 'all';
 type WeekSummaryMode = 'color' | 'name' | 'emoji';
 type ReviewDraft = Pick<WeekReview, 'summary' | 'wins' | 'problems' | 'nextWeekFocus'>;
 
@@ -48,6 +53,9 @@ export default function WeekPage() {
   const [reviewSaveState, setReviewSaveState] = useState<ReviewSaveState>('idle');
   const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
   const [reviewSaveErrorMessage, setReviewSaveErrorMessage] = useState<string | null>(null);
+  const [csvExportState, setCsvExportState] = useState<CsvExportState>('idle');
+  const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
+  const [csvExportErrorMessage, setCsvExportErrorMessage] = useState<string | null>(null);
   const reviewRequestIdRef = useRef(0);
   const visibleWeekStartDateRef = useRef(visibleWeekStartDate);
   const weekGrid = useMemo(
@@ -147,6 +155,58 @@ export default function WeekPage() {
       setReviewSaveErrorMessage(getSupabaseStorageErrorMessage(error));
     }
   }, [reviewDraft, visibleWeekStartDate]);
+
+  const exportWeekCsv = useCallback(async () => {
+    setCsvExportState('week');
+    setCsvExportMessage(null);
+    setCsvExportErrorMessage(null);
+
+    try {
+      const photoCountsByEntryId = await listWebPhotoReferenceCountsByEntryIds(
+        visibleEntries.map((entry) => entry.id),
+      );
+      const csv = createWebTimeEntriesCsv({
+        entries: visibleEntries,
+        categories,
+        photoCountsByEntryId,
+      });
+
+      downloadCsv(csv, `weekly-time-entries-week-${visibleWeekStartDate}.csv`);
+      setCsvExportMessage('현재 주 CSV 다운로드를 시작했습니다.');
+    } catch (error) {
+      setCsvExportErrorMessage(getCsvExportErrorMessage(error));
+    } finally {
+      setCsvExportState('idle');
+    }
+  }, [categories, visibleEntries, visibleWeekStartDate]);
+
+  const exportAllCsv = useCallback(async () => {
+    setCsvExportState('all');
+    setCsvExportMessage(null);
+    setCsvExportErrorMessage(null);
+
+    try {
+      const [nextEntries, nextCategories] = await Promise.all([
+        listWebTimeEntries(),
+        listWebCategories(),
+      ]);
+      const photoCountsByEntryId = await listWebPhotoReferenceCountsByEntryIds(
+        nextEntries.map((entry) => entry.id),
+      );
+      const csv = createWebTimeEntriesCsv({
+        entries: nextEntries,
+        categories: nextCategories,
+        photoCountsByEntryId,
+      });
+
+      downloadCsv(csv, `weekly-time-entries-all-${getLocalDateString()}.csv`);
+      setCsvExportMessage('전체 기록 CSV 다운로드를 시작했습니다.');
+    } catch (error) {
+      setCsvExportErrorMessage(getCsvExportErrorMessage(error));
+    } finally {
+      setCsvExportState('idle');
+    }
+  }, []);
 
   const handleReviewSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -328,6 +388,44 @@ export default function WeekPage() {
             ) : (
               <SummaryTotals totals={selectedTotals} />
             )}
+
+            <section className={styles.exportPanel} aria-labelledby="csv-export-title">
+              <div className={styles.panelHeader}>
+                <div>
+                  <h2 id="csv-export-title">CSV 내보내기</h2>
+                </div>
+              </div>
+
+              <div className={styles.exportActions}>
+                <button
+                  className={styles.primaryButton}
+                  disabled={loadState !== 'ready' || csvExportState !== 'idle'}
+                  type="button"
+                  onClick={() => void exportWeekCsv()}
+                >
+                  {csvExportState === 'week' ? '준비 중' : '현재 주 CSV'}
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={csvExportState !== 'idle'}
+                  type="button"
+                  onClick={() => void exportAllCsv()}
+                >
+                  {csvExportState === 'all' ? '준비 중' : '전체 기록 CSV'}
+                </button>
+              </div>
+
+              {csvExportMessage ? (
+                <p className={styles.saveStatus} aria-live="polite">
+                  {csvExportMessage}
+                </p>
+              ) : null}
+              {csvExportErrorMessage ? (
+                <div className={styles.saveError} aria-live="assertive">
+                  <p>내보내기 실패: {csvExportErrorMessage}</p>
+                </div>
+              ) : null}
+            </section>
 
             <section className={styles.reviewPanel} aria-labelledby="review-title">
               <div className={styles.panelHeader}>
@@ -608,6 +706,34 @@ function createReviewDraft(review: WeekReview | null): ReviewDraft {
     problems: review.problems,
     nextWeekFocus: review.nextWeekFocus,
   };
+}
+
+function downloadCsv(content: string, fileName: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+
+  try {
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.style.display = 'none';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function getCsvExportErrorMessage(error: unknown): string {
+  if (error instanceof SupabaseStorageError) {
+    return getSupabaseStorageErrorMessage(error);
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'CSV 파일을 만들지 못했습니다. 잠시 후 다시 시도해주세요.';
 }
 
 function formatDateTime(value: string): string {
