@@ -131,3 +131,4 @@ export * from './entryOverlap';
 export * from './photoMatcher';
 export * from './time';
 export * from './weekGrid';
+export * from './weeklyStats';
