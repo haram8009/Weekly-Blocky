@@ -32,7 +32,15 @@ export default function RootLayout() {
               backgroundColor: theme.color.background,
             },
           }}
-        />
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen
+            name="(tabs)"
+            options={{
+              gestureEnabled: false,
+            }}
+          />
+        </Stack>
       </LocalSettingsProvider>
     </SafeAreaProvider>
   );

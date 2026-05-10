@@ -18,10 +18,10 @@ export default function StartScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Link href="/week" asChild>
+        <Link href="/today" replace asChild>
           <PrimaryButton label="시작하기" />
         </Link>
-        <Link href="/week" asChild>
+        <Link href="/today" replace asChild>
           <PrimaryButton label="로그인" variant="secondary" />
         </Link>
       </View>

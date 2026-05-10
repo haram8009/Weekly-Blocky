@@ -7,15 +7,21 @@ import {
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
 } from '@weekly/domain';
-import { useMemo, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type GestureResponderEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type PanResponderGestureState,
 } from 'react-native';
 
@@ -30,6 +36,10 @@ import {
 const BLOCKS_PER_HOUR = 6;
 const BLOCK_ROW_GAP = theme.spacing.xs;
 const BLOCK_COLUMN_GAP = 2;
+const LONG_PRESS_SELECTION_DELAY_MS = 300;
+const LONG_PRESS_MOVE_TOLERANCE = 8;
+const EDGE_AUTO_SCROLL_THRESHOLD = 80;
+const EDGE_AUTO_SCROLL_MAX_STEP = 12;
 
 type SelectionDraft = {
   anchorSlotIndex: number;
@@ -37,11 +47,22 @@ type SelectionDraft = {
 };
 
 export default function TodayScreen() {
+  const { height: windowHeight } = useWindowDimensions();
+  const windowHeightRef = useRef(windowHeight);
+  windowHeightRef.current = windowHeight;
+  const scrollViewRef = useRef<ScrollView>(null);
   const blockMatrixRef = useRef<View>(null);
   const blockGridBoundsRef = useRef<WeekGridSlotBounds | null>(null);
   const selectionDraftRef = useRef<SelectionDraft | null>(null);
   const selectionStartPointRef = useRef<WeekGridSlotPoint | null>(null);
+  const latestTouchPointRef = useRef<WeekGridSlotPoint | null>(null);
   const isSelectionGestureActiveRef = useRef(false);
+  const isTouchActiveRef = useRef(false);
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const autoScrollStepRef = useRef(0);
+  const scrollOffsetYRef = useRef(0);
+  const selectionPulseValue = useRef(new Animated.Value(0)).current;
   const todayDate = getLocalDateString();
   const todayGrid = useMemo(() => {
     const weekGrid = buildWeekGrid({ weekStartDate: getWeekStartDate(todayDate, 'monday') });
@@ -53,61 +74,124 @@ export default function TodayScreen() {
   const [confirmedSelection, setConfirmedSelection] = useState<WeekGridTimeRangeSelection | null>(
     null,
   );
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const draftSelection = useMemo(
     () => createSelectedRange(blocks, selectionDraft),
     [blocks, selectionDraft],
   );
   const displayedSelection = draftSelection ?? confirmedSelection;
+  const selectedBlockPulseStyle = useMemo(
+    () => ({
+      opacity: selectionPulseValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0.88],
+      }),
+      transform: [
+        {
+          scale: selectionPulseValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1.06],
+          }),
+        },
+      ],
+    }),
+    [selectionPulseValue],
+  );
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: handleSelectionStart,
+        onMoveShouldSetPanResponder: () => isSelectionGestureActiveRef.current,
+        onMoveShouldSetPanResponderCapture: () => isSelectionGestureActiveRef.current,
         onPanResponderMove: handleSelectionMove,
-        onPanResponderRelease: handleSelectionEnd,
+        onPanResponderRelease: handleSelectionRelease,
         onPanResponderTerminate: handleSelectionCancel,
         onPanResponderTerminationRequest: () => false,
-        onShouldBlockNativeResponder: () => true,
-        onStartShouldSetPanResponder: () => true,
+        onShouldBlockNativeResponder: () => isSelectionGestureActiveRef.current,
+        onStartShouldSetPanResponder: () => false,
       }),
     [blocks],
+  );
+
+  useEffect(
+    () => () => {
+      clearLongPressTimer();
+      stopAutoScroll();
+      selectionPulseValue.stopAnimation();
+    },
+    [selectionPulseValue],
   );
 
   function handleBlockGridLayout() {
     measureBlockGridBounds();
   }
 
-  function handleSelectionStart(event: GestureResponderEvent) {
+  function handleBlockGridTouchStart(event: GestureResponderEvent) {
     const point = getPagePointFromGesture(event);
 
+    clearLongPressTimer();
+    stopAutoScroll();
+    isTouchActiveRef.current = true;
     selectionStartPointRef.current = point;
-    isSelectionGestureActiveRef.current = true;
-    measureBlockGridBounds((bounds) => {
-      if (isSelectionGestureActiveRef.current) {
-        startSelectionAtPoint(point, bounds);
-      }
-    });
+    latestTouchPointRef.current = point;
+    longPressTimeoutRef.current = setTimeout(
+      activateSelectionFromLongPress,
+      LONG_PRESS_SELECTION_DELAY_MS,
+    );
+  }
+
+  function handleBlockGridTouchMove(event: GestureResponderEvent) {
+    handleSelectionMoveToPoint(getPagePointFromGesture(event));
   }
 
   function handleSelectionMove(
     event: GestureResponderEvent,
     gestureState: PanResponderGestureState,
   ) {
-    const bounds = blockGridBoundsRef.current;
-
-    if (isSelectionGestureActiveRef.current && bounds) {
-      updateSelectionFocusFromPoint(getPagePointFromGesture(event, gestureState), bounds);
-    }
+    handleSelectionMoveToPoint(getPagePointFromGesture(event, gestureState));
   }
 
-  function handleSelectionEnd(
+  function handleSelectionMoveToPoint(point: WeekGridSlotPoint) {
+    latestTouchPointRef.current = point;
+
+    if (!isSelectionGestureActiveRef.current) {
+      cancelLongPressIfMovedTooFar(point);
+      return;
+    }
+
+    const bounds = blockGridBoundsRef.current;
+
+    if (bounds) {
+      updateSelectionFocusFromPoint(point, bounds);
+    }
+
+    updateAutoScroll(point);
+  }
+
+  function handleBlockGridTouchEnd(event: GestureResponderEvent) {
+    finishSelectionAtPoint(getPagePointFromGesture(event));
+  }
+
+  function handleSelectionRelease(
     event: GestureResponderEvent,
     gestureState: PanResponderGestureState,
   ) {
-    const releasePoint = getPagePointFromGesture(event, gestureState);
+    finishSelectionAtPoint(getPagePointFromGesture(event, gestureState));
+  }
+
+  function finishSelectionAtPoint(releasePoint: WeekGridSlotPoint) {
+    clearLongPressTimer();
+    isTouchActiveRef.current = false;
+
+    if (!isSelectionGestureActiveRef.current) {
+      resetSelectionGesture();
+      return;
+    }
+
     const bounds = blockGridBoundsRef.current;
 
     isSelectionGestureActiveRef.current = false;
+    setIsSelectionMode(false);
+    stopAutoScroll();
 
     if (bounds && selectionDraftRef.current) {
       updateSelectionFocusFromPoint(releasePoint, bounds);
@@ -122,20 +206,66 @@ export default function TodayScreen() {
     });
   }
 
+  function activateSelectionFromLongPress() {
+    clearLongPressTimer();
+
+    if (!isTouchActiveRef.current || isSelectionGestureActiveRef.current) {
+      return;
+    }
+
+    const startPoint = selectionStartPointRef.current;
+
+    if (!startPoint) {
+      return;
+    }
+
+    measureBlockGridBounds((bounds) => {
+      if (!isTouchActiveRef.current || isSelectionGestureActiveRef.current) {
+        return;
+      }
+
+      isSelectionGestureActiveRef.current = true;
+      setIsSelectionMode(true);
+      triggerSelectionFeedback();
+      startSelectionAtPoint(startPoint, bounds);
+
+      if (latestTouchPointRef.current) {
+        updateSelectionFocusFromPoint(latestTouchPointRef.current, bounds);
+        updateAutoScroll(latestTouchPointRef.current);
+      }
+    });
+  }
+
+  function triggerSelectionFeedback() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+
+    selectionPulseValue.stopAnimation();
+    selectionPulseValue.setValue(0);
+    Animated.sequence([
+      Animated.timing(selectionPulseValue, {
+        duration: 120,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(selectionPulseValue, {
+        duration: 140,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+
   function finishSelection() {
     const range = createSelectedRange(blocks, selectionDraftRef.current);
     if (range) {
       setConfirmedSelection(range);
     }
 
-    selectionStartPointRef.current = null;
-    applySelectionDraft(null);
+    resetSelectionGesture();
   }
 
   function handleSelectionCancel() {
-    isSelectionGestureActiveRef.current = false;
-    selectionStartPointRef.current = null;
-    applySelectionDraft(null);
+    resetSelectionGesture();
   }
 
   function clearConfirmedSelection() {
@@ -148,6 +278,10 @@ export default function TodayScreen() {
       blockGridBoundsRef.current = bounds;
       onMeasured?.(bounds);
     });
+  }
+
+  function handleScreenScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
   }
 
   function startSelectionAtPoint(point: WeekGridSlotPoint, bounds: WeekGridSlotBounds) {
@@ -204,8 +338,104 @@ export default function TodayScreen() {
     setSelectionDraft(nextSelectionDraft);
   }
 
+  function cancelLongPressIfMovedTooFar(point: WeekGridSlotPoint) {
+    const startPoint = selectionStartPointRef.current;
+
+    if (!startPoint) {
+      return;
+    }
+
+    if (getPointDistance(startPoint, point) > LONG_PRESS_MOVE_TOLERANCE) {
+      clearLongPressTimer();
+    }
+  }
+
+  function clearLongPressTimer() {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }
+
+  function updateAutoScroll(point: WeekGridSlotPoint) {
+    autoScrollStepRef.current = getAutoScrollStep(point);
+
+    if (autoScrollStepRef.current === 0) {
+      stopAutoScroll();
+      return;
+    }
+
+    startAutoScroll();
+  }
+
+  function startAutoScroll() {
+    if (autoScrollFrameRef.current !== null) {
+      return;
+    }
+
+    const tick = () => {
+      if (!isSelectionGestureActiveRef.current || autoScrollStepRef.current === 0) {
+        autoScrollFrameRef.current = null;
+        return;
+      }
+
+      const nextOffsetY = Math.max(0, scrollOffsetYRef.current + autoScrollStepRef.current);
+      scrollOffsetYRef.current = nextOffsetY;
+      scrollViewRef.current?.scrollTo({ animated: false, y: nextOffsetY });
+      measureBlockGridBounds((bounds) => {
+        if (isSelectionGestureActiveRef.current && latestTouchPointRef.current) {
+          updateSelectionFocusFromPoint(latestTouchPointRef.current, bounds);
+        }
+      });
+
+      autoScrollFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    autoScrollFrameRef.current = requestAnimationFrame(tick);
+  }
+
+  function stopAutoScroll() {
+    autoScrollStepRef.current = 0;
+
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }
+
+  function getAutoScrollStep(point: WeekGridSlotPoint): number {
+    const distanceFromTop = point.pageY;
+    const distanceFromBottom = windowHeightRef.current - point.pageY;
+
+    if (distanceFromTop < EDGE_AUTO_SCROLL_THRESHOLD) {
+      return -getAutoScrollSpeed(EDGE_AUTO_SCROLL_THRESHOLD - distanceFromTop);
+    }
+
+    if (distanceFromBottom < EDGE_AUTO_SCROLL_THRESHOLD) {
+      return getAutoScrollSpeed(EDGE_AUTO_SCROLL_THRESHOLD - distanceFromBottom);
+    }
+
+    return 0;
+  }
+
+  function resetSelectionGesture() {
+    clearLongPressTimer();
+    stopAutoScroll();
+    isSelectionGestureActiveRef.current = false;
+    isTouchActiveRef.current = false;
+    selectionStartPointRef.current = null;
+    latestTouchPointRef.current = null;
+    setIsSelectionMode(false);
+    applySelectionDraft(null);
+  }
+
   return (
-    <Screen>
+    <Screen
+      onScroll={handleScreenScroll}
+      scrollEnabled={!isSelectionMode}
+      scrollEventThrottle={16}
+      scrollViewRef={scrollViewRef}
+    >
       <View style={styles.header}>
         <Text style={styles.eyebrow}>오늘</Text>
         <Text style={styles.title}>{formatMonthDay(todayDate)} 기록</Text>
@@ -213,12 +443,6 @@ export default function TodayScreen() {
 
       <View style={styles.gridHeader}>
         <Text style={styles.gridTitle}>05:00-24:00</Text>
-        <Text style={styles.gridMeta}>10분 블록 {todayGrid?.blocks.length ?? 0}개</Text>
-        {displayedSelection ? (
-          <Text style={styles.selectionText}>
-            선택 {displayedSelection.startTime}-{displayedSelection.endTime}
-          </Text>
-        ) : null}
       </View>
 
       <View style={styles.dayGrid}>
@@ -234,18 +458,26 @@ export default function TodayScreen() {
             ref={blockMatrixRef}
             style={styles.blockMatrix}
             onLayout={handleBlockGridLayout}
+            onTouchCancel={handleSelectionCancel}
+            onTouchEnd={handleBlockGridTouchEnd}
+            onTouchMove={handleBlockGridTouchMove}
+            onTouchStart={handleBlockGridTouchStart}
             {...panResponder.panHandlers}
           >
             {hourlyRows.map((row) => (
               <View key={row.hourLabel} style={styles.hourBlocks}>
                 {row.blocks.map((block) => (
-                  <View
-                    key={block.id}
-                    style={[
-                      styles.emptyBlock,
-                      isBlockSelected(block.slotIndex, displayedSelection) && styles.selectedBlock,
-                    ]}
-                  />
+                  <View key={block.id} style={styles.blockContainer}>
+                    <Animated.View
+                      style={[
+                        styles.emptyBlock,
+                        isBlockSelected(block.slotIndex, displayedSelection) &&
+                          styles.selectedBlock,
+                        isBlockSelected(block.slotIndex, displayedSelection) &&
+                          selectedBlockPulseStyle,
+                      ]}
+                    />
+                  </View>
                 ))}
               </View>
             ))}
@@ -297,6 +529,16 @@ export default function TodayScreen() {
       </Modal>
     </Screen>
   );
+}
+
+function getPointDistance(firstPoint: WeekGridSlotPoint, secondPoint: WeekGridSlotPoint): number {
+  return Math.hypot(firstPoint.pageX - secondPoint.pageX, firstPoint.pageY - secondPoint.pageY);
+}
+
+function getAutoScrollSpeed(distanceIntoEdge: number): number {
+  const ratio = Math.min(Math.max(distanceIntoEdge / EDGE_AUTO_SCROLL_THRESHOLD, 0), 1);
+
+  return Math.ceil(ratio * EDGE_AUTO_SCROLL_MAX_STEP);
 }
 
 function createSelectedRange(
@@ -405,17 +647,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: '800',
   },
-  gridMeta: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  selectionText: {
-    color: theme.color.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
   dayGrid: {
     borderWidth: 1,
     borderColor: theme.color.border,
@@ -445,14 +676,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: BLOCK_COLUMN_GAP,
   },
+  blockContainer: {
+    flex: 1,
+    minHeight: 24,
+  },
   emptyBlock: {
     flex: 1,
     minHeight: 24,
+    borderWidth: 1,
+    borderColor: 'transparent',
     borderRadius: 2,
     backgroundColor: theme.color.surfaceMuted,
   },
   selectedBlock: {
     backgroundColor: theme.color.accent,
+    borderColor: theme.color.primary,
   },
   drawerOverlay: {
     flex: 1,
