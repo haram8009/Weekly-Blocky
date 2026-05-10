@@ -454,12 +454,12 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 - [x] 모바일 Supabase 세션으로 서버 요청 수행
 - [x] 모바일에서 categories 조회
 - [x] 모바일에서 timeEntries 조회
-- [ ] 모바일에서 weekReviews 조회
+- [x] 모바일에서 weekReviews 조회
 - [x] 모바일에서 settings 조회
 - [x] 모바일 create/update/delete 후 서버 데이터 재조회
 - [x] 저장 중 상태 표시
 - [x] 저장 실패 상태 표시
-- [ ] 수동 재시도 버튼 초안 작성
+- [x] 수동 재시도 버튼 초안 작성
 
 ### 5. 서버 데이터 공유
 
