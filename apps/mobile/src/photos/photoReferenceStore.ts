@@ -43,6 +43,11 @@ export type SyncDatePhotoReferencesInput = {
   now?: string;
 };
 
+export type SyncDatePhotoReferencesResult = {
+  references: PhotoReference[];
+  thumbnailSyncErrorMessage: string | null;
+};
+
 export type UpdatePhotoReferenceVisibilityInput = {
   userId: EntityId;
   date: string;
@@ -57,8 +62,9 @@ export async function syncDatePhotoReferences({
   entries,
   thumbnailSyncEnabled = false,
   now = new Date().toISOString(),
-}: SyncDatePhotoReferencesInput): Promise<PhotoReference[]> {
+}: SyncDatePhotoReferencesInput): Promise<SyncDatePhotoReferencesResult> {
   const database = await getLocalDatabase();
+  let thumbnailSyncErrorMessage: string | null = null;
 
   await initializeLocalDatabase(database);
   await database.withTransactionAsync(async () => {
@@ -152,16 +158,25 @@ WHERE id = ? AND userId = ?
 
   if (thumbnailSyncEnabled) {
     const thumbnailReadyReferences = await listPhotoReferencesByDate(userId, date);
-    const syncResults = await syncRemoteThumbnails({
-      userId,
-      references: thumbnailReadyReferences,
-      now,
-    });
 
-    await updateRemoteThumbnailUrls(userId, syncResults, now);
+    try {
+      const syncResults = await syncRemoteThumbnails({
+        userId,
+        references: thumbnailReadyReferences,
+        now,
+      });
+
+      await updateRemoteThumbnailUrls(userId, syncResults, now);
+    } catch (error) {
+      thumbnailSyncErrorMessage =
+        error instanceof Error ? error.message : '썸네일 동기화에 실패했습니다.';
+    }
   }
 
-  return listPhotoReferencesByDate(userId, date);
+  return {
+    references: await listPhotoReferencesByDate(userId, date),
+    thumbnailSyncErrorMessage,
+  };
 }
 
 export async function hidePhotoReference({

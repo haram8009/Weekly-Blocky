@@ -150,6 +150,7 @@ export default function TodayScreen() {
   const [dayPhotosPermissionScope, setDayPhotosPermissionScope] = useState<string | null>(null);
   const [dayPhotosErrorMessage, setDayPhotosErrorMessage] = useState<string | null>(null);
   const [thumbnailSyncEnabled, setThumbnailSyncEnabled] = useState(false);
+  const [thumbnailSyncErrorMessage, setThumbnailSyncErrorMessage] = useState<string | null>(null);
   const [entrySaveState, setEntrySaveState] = useState<EntrySaveState>('idle');
   const [entrySaveErrorMessage, setEntrySaveErrorMessage] = useState<string | null>(null);
   const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
@@ -331,6 +332,7 @@ export default function TodayScreen() {
     setDayPhotosPermissionScope(null);
     setDayPhotosErrorMessage(null);
     setThumbnailSyncEnabled(false);
+    setThumbnailSyncErrorMessage(null);
 
     if (!envStatus.isConfigured) {
       setDayPhotosLoadState('disabled');
@@ -375,6 +377,7 @@ export default function TodayScreen() {
         setDayPhotos([]);
         setDayPhotosPermissionScope(null);
         setThumbnailSyncEnabled(false);
+        setThumbnailSyncErrorMessage(null);
         setDayPhotosLoadState('error');
         setDayPhotosErrorMessage(
           error instanceof Error ? error.message : '이 날짜 사진을 불러오지 못했습니다.',
@@ -414,12 +417,13 @@ export default function TodayScreen() {
       entries: dayEntries,
       thumbnailSyncEnabled,
     })
-      .then((references) => {
+      .then((result) => {
         if (!isActive) {
           return;
         }
 
-        setDayPhotoReferences(references);
+        setDayPhotoReferences(result.references);
+        setThumbnailSyncErrorMessage(result.thumbnailSyncErrorMessage);
       })
       .catch((error) => {
         if (!isActive) {
@@ -427,6 +431,7 @@ export default function TodayScreen() {
         }
 
         setDayPhotoReferences([]);
+        setThumbnailSyncErrorMessage(null);
         setDayPhotosLoadState('error');
         setDayPhotosErrorMessage(
           error instanceof Error ? error.message : '사진 참조를 저장하지 못했습니다.',
@@ -1121,6 +1126,7 @@ export default function TodayScreen() {
         dayPhotosPermissionScope,
         dayPhotosErrorMessage,
       )}
+      {renderThumbnailSyncStateBanner(thumbnailSyncErrorMessage)}
 
       <View style={styles.dayGrid}>
         <View style={styles.gridBody}>
@@ -1767,6 +1773,18 @@ function renderDayPhotoStateBanner(
   }
 
   return <Text style={styles.photoStateBanner}>이 날짜 사진 {photoCount}개를 확인했습니다.</Text>;
+}
+
+function renderThumbnailSyncStateBanner(errorMessage: string | null) {
+  if (!errorMessage) {
+    return null;
+  }
+
+  return (
+    <Text style={[styles.photoStateBanner, styles.dayStateBannerError]}>
+      썸네일 동기화 실패: {errorMessage}
+    </Text>
+  );
 }
 
 function renderEntryPhotoLookupContent(
