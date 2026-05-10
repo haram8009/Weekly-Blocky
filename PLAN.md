@@ -654,16 +654,16 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 - [ ] 현재 주 CSV 내보내기
 - [ ] 전체 기록 CSV 내보내기
-- [ ] 필드 순서 정의: `date,startTime,endTime,durationMinutes,categoryName,categoryColor,categoryEmoji,note,source,photoCount,createdAt,updatedAt`
-- [ ] 날짜, 시작 시간 기준 정렬
-- [ ] UTF-8 BOM 추가
-- [ ] 쉼표 escape 처리
-- [ ] 따옴표 escape 처리
-- [ ] 줄바꿈 escape 처리
-- [ ] 사진 원본 경로 제외
-- [ ] 로컬 사진 URI 제외
-- [ ] 썸네일 URL 제외
-- [ ] 사진 수는 `photoCount`로만 포함
+- [x] 필드 순서 정의: `date,startTime,endTime,durationMinutes,categoryName,categoryColor,categoryEmoji,note,source,photoCount,createdAt,updatedAt`
+- [x] 날짜, 시작 시간 기준 정렬
+- [x] UTF-8 BOM 추가
+- [x] 쉼표 escape 처리
+- [x] 따옴표 escape 처리
+- [x] 줄바꿈 escape 처리
+- [x] 사진 원본 경로 제외
+- [x] 로컬 사진 URI 제외
+- [x] 썸네일 URL 제외
+- [x] 사진 수는 `photoCount`로만 포함
 
 ### 4. QA 체크리스트
 
@@ -709,7 +709,7 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 - [ ] 미기록 시간 계산 단위 테스트
 - [ ] 기록 완성률 계산 단위 테스트
 - [ ] 사진 촬영 시각 매칭 단위 테스트
-- [ ] CSV escape 처리 단위 테스트
+- [x] CSV escape 처리 단위 테스트
 - [ ] 모바일 핵심 기록 흐름 수동 테스트
 - [ ] 모바일 네트워크 실패 상태 수동 테스트
 - [ ] 웹 주간 열람 수동 테스트
