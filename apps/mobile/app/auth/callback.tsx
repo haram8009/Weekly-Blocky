@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   title: {
     color: theme.color.text,
     fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 30,
   },
   description: {

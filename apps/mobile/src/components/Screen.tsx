@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
   },
 });

@@ -41,12 +41,12 @@ const styles = StyleSheet.create({
   productName: {
     color: theme.color.primary,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   title: {
     color: theme.color.text,
     fontSize: theme.typography.title,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 40,
   },
   description: {

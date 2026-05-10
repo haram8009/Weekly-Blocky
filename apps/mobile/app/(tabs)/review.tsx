@@ -416,18 +416,18 @@ function formatDateTime(value: string): string {
 
 const styles = StyleSheet.create({
   header: {
-    gap: theme.spacing.sm,
+    gap: 2,
     marginBottom: theme.spacing.lg,
   },
   eyebrow: {
-    color: theme.color.primary,
+    color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   title: {
     color: theme.color.text,
-    fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontSize: theme.typography.title,
+    fontWeight: '700',
   },
   weekNavigator: {
     flexDirection: 'row',
@@ -495,12 +495,10 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
     marginBottom: theme.spacing.lg,
-    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -515,7 +513,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   sectionText: {
     color: theme.color.textMuted,

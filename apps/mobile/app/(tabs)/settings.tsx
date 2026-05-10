@@ -286,7 +286,7 @@ export default function SettingsScreen() {
                 )
               }
               thumbColor={photoMatchingEnabled ? theme.color.primary : theme.color.surface}
-              trackColor={{ false: theme.color.border, true: theme.color.surfaceMuted }}
+              trackColor={{ false: theme.color.border, true: theme.color.primary }}
               value={photoMatchingEnabled}
             />
           </View>
@@ -306,7 +306,7 @@ export default function SettingsScreen() {
                 )
               }
               thumbColor={thumbnailSyncEnabled ? theme.color.primary : theme.color.surface}
-              trackColor={{ false: theme.color.border, true: theme.color.surfaceMuted }}
+              trackColor={{ false: theme.color.border, true: theme.color.primary }}
               value={thumbnailSyncEnabled}
             />
           </View>
@@ -410,25 +410,23 @@ function getAccessPrivileges(permission: PhotoPermissionResponse): string | null
 
 const styles = StyleSheet.create({
   header: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.xl,
+    gap: 2,
+    marginBottom: theme.spacing.lg,
   },
   eyebrow: {
-    color: theme.color.primary,
+    color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   title: {
     color: theme.color.text,
-    fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontSize: theme.typography.title,
+    fontWeight: '700',
   },
   list: {
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
   },
   row: {
     minHeight: 56,
@@ -443,7 +441,7 @@ const styles = StyleSheet.create({
   label: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   value: {
     color: theme.color.textMuted,
@@ -452,12 +450,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   accountSection: {
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.md,
   },
   accountAction: {
     gap: theme.spacing.sm,
@@ -465,12 +461,11 @@ const styles = StyleSheet.create({
   },
   photoSection: {
     gap: theme.spacing.md,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.lg,
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -481,15 +476,15 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   statusBadge: {
     overflow: 'hidden',
     borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceMuted,
+    backgroundColor: 'transparent',
     color: theme.color.primary,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -501,17 +496,16 @@ const styles = StyleSheet.create({
   permissionDescription: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '700',
+    fontWeight: '500',
     lineHeight: 20,
   },
   photoActions: {
     gap: theme.spacing.sm,
   },
   toggleList: {
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
   },
   toggleRow: {
     minHeight: 72,
@@ -536,7 +530,7 @@ const styles = StyleSheet.create({
   statusText: {
     color: theme.color.primary,
     fontSize: theme.typography.caption,
-    fontWeight: '700',
+    fontWeight: '500',
     lineHeight: 20,
     padding: theme.spacing.lg,
   },

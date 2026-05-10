@@ -415,7 +415,7 @@ export default function CategoriesScreen() {
           onPress={returnToToday}
           style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.backButtonText}>{'<'}</Text>
+          <Text style={styles.backButtonText}>{'‹'}</Text>
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>카테고리</Text>
@@ -739,36 +739,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
   },
   backButtonText: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '900',
+    color: theme.color.primary,
+    fontSize: 30,
+    fontWeight: '400',
   },
   headerCopy: {
     flex: 1,
     gap: theme.spacing.xs,
   },
   eyebrow: {
-    color: theme.color.primary,
+    color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   title: {
     color: theme.color.text,
-    fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontSize: theme.typography.title,
+    fontWeight: '700',
   },
   actionRow: {
     gap: theme.spacing.sm,
@@ -776,20 +776,16 @@ const styles = StyleSheet.create({
   },
   formSection: {
     gap: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    marginBottom: theme.spacing.lg,
-    padding: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    marginBottom: theme.spacing.md,
+    paddingTop: theme.spacing.md,
   },
   listSection: {
     gap: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    padding: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -800,25 +796,25 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   countBadge: {
     overflow: 'hidden',
     borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceMuted,
+    backgroundColor: 'transparent',
     color: theme.color.primary,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
   archivedBadge: {
     overflow: 'hidden',
     borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceMuted,
+    backgroundColor: 'transparent',
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -828,7 +824,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   textInput: {
     minHeight: 40,
@@ -875,10 +871,10 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.danger,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
     paddingHorizontal: theme.spacing.lg,
   },
   archiveButtonPressed: {
@@ -887,14 +883,12 @@ const styles = StyleSheet.create({
   archiveButtonText: {
     color: theme.color.danger,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   messageBox: {
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.background,
-    padding: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.md,
   },
   emptyState: {
     gap: theme.spacing.md,
@@ -902,7 +896,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   helperText: {
     color: theme.color.textMuted,
@@ -920,10 +914,10 @@ const styles = StyleSheet.create({
   exampleChip: {
     minHeight: 32,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surface,
+    backgroundColor: theme.color.surfaceMuted,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
   },
@@ -975,7 +969,7 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   categoryMeta: {
     color: theme.color.textMuted,
@@ -991,10 +985,10 @@ const styles = StyleSheet.create({
     minWidth: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
     paddingHorizontal: theme.spacing.md,
   },
   smallDangerButton: {
@@ -1009,7 +1003,7 @@ const styles = StyleSheet.create({
   smallButtonText: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   smallDangerButtonText: {
     color: theme.color.danger,
@@ -1019,10 +1013,10 @@ const styles = StyleSheet.create({
     minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
   },
   dragHandleActive: {
     borderColor: theme.color.primary,
@@ -1031,7 +1025,7 @@ const styles = StyleSheet.create({
   dragHandleText: {
     color: theme.color.textMuted,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '500',
   },
   buttonPressed: {
     backgroundColor: theme.color.surfaceMuted,
@@ -1039,7 +1033,7 @@ const styles = StyleSheet.create({
   statusText: {
     color: theme.color.primary,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     lineHeight: 20,
     marginBottom: theme.spacing.md,
   },

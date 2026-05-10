@@ -122,7 +122,7 @@ export default function WeekScreen() {
           onPress={() => moveWeek(-WEEK_STEP_DAYS)}
           style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
         >
-          <Text style={styles.iconButtonText}>{'<'}</Text>
+          <Text style={styles.iconButtonText}>{'‹'}</Text>
         </Pressable>
 
         <View style={styles.weekRangeGroup}>
@@ -137,7 +137,7 @@ export default function WeekScreen() {
           onPress={() => moveWeek(WEEK_STEP_DAYS)}
           style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
         >
-          <Text style={styles.iconButtonText}>{'>'}</Text>
+          <Text style={styles.iconButtonText}>{'›'}</Text>
         </Pressable>
       </View>
 
@@ -259,42 +259,42 @@ function formatWeekEntriesSummary(state: WeekEntriesLoadState, recordedDateCount
 
 const styles = StyleSheet.create({
   header: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    gap: 2,
+    marginBottom: theme.spacing.md,
   },
   eyebrow: {
-    color: theme.color.primary,
+    color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   title: {
     color: theme.color.text,
-    fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontSize: theme.typography.title,
+    fontWeight: '700',
   },
   weekNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
   iconButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
   },
   iconButtonPressed: {
     backgroundColor: theme.color.surfaceMuted,
   },
   iconButtonText: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '900',
+    color: theme.color.primary,
+    fontSize: 30,
+    fontWeight: '400',
   },
   weekRangeGroup: {
     flex: 1,
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   weekRange: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
     textAlign: 'center',
   },
   weekRangeCaption: {
@@ -314,31 +314,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   todayButton: {
-    minHeight: 44,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.primary,
+    backgroundColor: 'transparent',
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
   },
   todayButtonPressed: {
-    backgroundColor: theme.color.primaryPressed,
-  },
-  todayButtonDisabled: {
     backgroundColor: theme.color.surfaceMuted,
   },
+  todayButtonDisabled: {
+    backgroundColor: 'transparent',
+  },
   todayButtonText: {
-    color: theme.color.surface,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
+    color: theme.color.primary,
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
   },
   todayButtonTextDisabled: {
     color: theme.color.textMuted,
   },
   weekDayList: {
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: 0,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.color.border,
     marginBottom: theme.spacing.lg,
   },
   dayCell: {
@@ -347,21 +353,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: theme.spacing.xs,
-    borderWidth: 1,
+    borderRightWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
   },
   dayCellPressed: {
     opacity: 0.78,
   },
   todayCell: {
-    borderColor: theme.color.primary,
-    backgroundColor: theme.color.surfaceMuted,
+    borderColor: theme.color.border,
+    backgroundColor: theme.color.surface,
   },
   recordedCell: {
-    borderColor: theme.color.accent,
-    backgroundColor: '#FFF7F1',
+    borderColor: theme.color.border,
+    backgroundColor: theme.color.surface,
   },
   recordedTodayCell: {
     borderColor: theme.color.primary,
@@ -370,7 +375,7 @@ const styles = StyleSheet.create({
   dayLabel: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   todayLabel: {
     color: theme.color.primary,
@@ -378,7 +383,7 @@ const styles = StyleSheet.create({
   dayNumber: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   todayNumber: {
     color: theme.color.primary,
@@ -389,7 +394,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   recordedStatusIndicator: {
-    backgroundColor: theme.color.accent,
+    backgroundColor: theme.color.primary,
   },
   emptyStatusIndicator: {
     borderWidth: 1,
@@ -398,16 +403,14 @@ const styles = StyleSheet.create({
   },
   summaryPlaceholder: {
     gap: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    padding: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.md,
   },
   summaryTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   summaryText: {
     color: theme.color.textMuted,

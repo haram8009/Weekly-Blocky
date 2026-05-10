@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   fallbackTitle: {
     color: theme.color.text,
     fontSize: theme.typography.heading,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   fallbackMessage: {
     color: theme.color.textMuted,
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   retryButton: {
-    minHeight: 52,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radius.md,

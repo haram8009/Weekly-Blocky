@@ -28,32 +28,32 @@ export function PrimaryButton({ label, variant = 'primary', style, ...props }: P
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 52,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
   },
   primary: {
-    backgroundColor: theme.color.primary,
+    backgroundColor: 'transparent',
   },
   primaryPressed: {
-    backgroundColor: theme.color.primaryPressed,
+    backgroundColor: theme.color.surfaceMuted,
   },
   secondary: {
-    backgroundColor: theme.color.surface,
-    borderColor: theme.color.border,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderWidth: 0,
   },
   secondaryPressed: {
     backgroundColor: theme.color.surfaceMuted,
   },
   label: {
-    color: theme.color.surface,
+    color: theme.color.primary,
     fontSize: theme.typography.body,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   secondaryLabel: {
-    color: theme.color.text,
+    color: theme.color.textMuted,
   },
 });

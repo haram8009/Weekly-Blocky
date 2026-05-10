@@ -1096,7 +1096,7 @@ export default function TodayScreen() {
           onPress={() => moveSelectedDate(-1)}
           style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
         >
-          <Text style={styles.dateButtonText}>{'<'}</Text>
+          <Text style={styles.dateButtonText}>{'‹'}</Text>
         </Pressable>
 
         <Pressable
@@ -1126,7 +1126,7 @@ export default function TodayScreen() {
           onPress={() => moveSelectedDate(1)}
           style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
         >
-          <Text style={styles.dateButtonText}>{'>'}</Text>
+          <Text style={styles.dateButtonText}>{'›'}</Text>
         </Pressable>
       </View>
 
@@ -1254,6 +1254,7 @@ export default function TodayScreen() {
               contentContainerStyle={styles.categoryDrawerContent}
               keyboardShouldPersistTaps="handled"
             >
+              <View style={styles.drawerHandle} />
               <View style={styles.categoryPaletteHeader}>
                 <View>
                   <Text style={styles.categoryPaletteTitle}>카테고리</Text>
@@ -1440,6 +1441,7 @@ export default function TodayScreen() {
               contentContainerStyle={styles.categoryDrawerContent}
               keyboardShouldPersistTaps="handled"
             >
+              <View style={styles.drawerHandle} />
               <View style={styles.categoryPaletteHeader}>
                 <View>
                   <Text style={styles.categoryPaletteTitle}>기록 편집</Text>
@@ -2111,8 +2113,8 @@ function formatMonthDay(date: DateString): string {
 
 const styles = StyleSheet.create({
   header: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -2122,77 +2124,79 @@ const styles = StyleSheet.create({
   },
   headerTitleCopy: {
     flex: 1,
-    gap: theme.spacing.sm,
+    gap: 2,
   },
   headerMenuButton: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
   },
   headerMenuButtonText: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '900',
+    color: theme.color.primary,
+    fontSize: 22,
+    fontWeight: '600',
     lineHeight: 20,
   },
   eyebrow: {
-    color: theme.color.primary,
+    color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   title: {
     color: theme.color.text,
-    fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontSize: theme.typography.title,
+    fontWeight: '700',
   },
   dateNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
   },
   dateButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
   },
   dateButtonPressed: {
     backgroundColor: theme.color.surfaceMuted,
   },
   dateButtonText: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '900',
+    color: theme.color.primary,
+    fontSize: 30,
+    fontWeight: '400',
   },
   todayDateButton: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.primary,
-    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: 'transparent',
+    paddingHorizontal: theme.spacing.md,
   },
   todayDateButtonPressed: {
-    backgroundColor: theme.color.primaryPressed,
-  },
-  todayDateButtonDisabled: {
     backgroundColor: theme.color.surfaceMuted,
   },
+  todayDateButtonDisabled: {
+    backgroundColor: 'transparent',
+  },
   todayDateButtonText: {
-    color: theme.color.surface,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
+    color: theme.color.primary,
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
   },
   todayDateButtonTextDisabled: {
     color: theme.color.textMuted,
@@ -2200,65 +2204,63 @@ const styles = StyleSheet.create({
   dailySummary: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.color.border,
   },
   summaryMetric: {
-    flexBasis: '48%',
+    flexBasis: '29%',
     flexGrow: 1,
-    minHeight: 72,
+    minHeight: 44,
     justifyContent: 'center',
     gap: theme.spacing.xs,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    padding: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
   },
   summaryMetricLabel: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   summaryMetricValue: {
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   dayStateBanner: {
-    borderWidth: 1,
+    borderWidth: 0,
+    borderLeftWidth: 3,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
     marginBottom: theme.spacing.md,
-    padding: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
   },
   dayStateBannerError: {
     borderColor: theme.color.danger,
     color: theme.color.danger,
   },
   photoStateBanner: {
-    borderWidth: 1,
+    borderWidth: 0,
+    borderLeftWidth: 3,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
     marginBottom: theme.spacing.md,
-    padding: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
   },
   dayGrid: {
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    marginBottom: theme.spacing.lg,
-    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.xl,
   },
   gridBody: {
     flexDirection: 'row',
@@ -2289,10 +2291,10 @@ const styles = StyleSheet.create({
   emptyBlock: {
     flex: 1,
     minHeight: 30,
-    borderWidth: 1,
+    borderWidth: 0,
     borderColor: 'transparent',
-    borderRadius: 2,
-    backgroundColor: theme.color.surfaceMuted,
+    borderRadius: 3,
+    backgroundColor: '#F4F4F5',
     overflow: 'hidden',
   },
   blockPhotoIndicator: {
@@ -2310,11 +2312,12 @@ const styles = StyleSheet.create({
   blockPhotoIndicatorText: {
     color: theme.color.text,
     fontSize: 8,
-    fontWeight: '900',
+    fontWeight: '600',
     lineHeight: 10,
   },
   selectedBlock: {
     backgroundColor: theme.color.accent,
+    borderWidth: 1,
     borderColor: theme.color.primary,
   },
   entryListSection: {
@@ -2330,44 +2333,42 @@ const styles = StyleSheet.create({
   entryListTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   entryListCount: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   entryListStatus: {
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
   entryCardList: {
-    gap: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
   },
   entryCard: {
     flexDirection: 'row',
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 0,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
   },
   entryCardPressed: {
     backgroundColor: theme.color.surfaceMuted,
   },
   entryColorBar: {
-    width: 6,
+    width: 4,
   },
   entryCardBody: {
     flex: 1,
     gap: theme.spacing.xs,
-    padding: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    paddingLeft: theme.spacing.md,
   },
   entryCardHeader: {
     flexDirection: 'row',
@@ -2379,17 +2380,17 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   entryDuration: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   entryCategory: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     lineHeight: 20,
   },
   entryNote: {
@@ -2419,19 +2420,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.surfaceMuted,
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     lineHeight: 26,
     paddingHorizontal: theme.spacing.sm,
   },
   entryPhotoStatus: {
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceMuted,
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
     lineHeight: 20,
-    padding: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   entryPhotoStatusError: {
     borderColor: theme.color.danger,
@@ -2464,20 +2461,20 @@ const styles = StyleSheet.create({
     height: 112,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
     backgroundColor: theme.color.surfaceMuted,
   },
   entryPhotoDetailFallbackText: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   entryPhotoDetailTime: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     textAlign: 'center',
   },
   entryPhotoActionRow: {
@@ -2487,10 +2484,10 @@ const styles = StyleSheet.create({
     minHeight: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
     paddingHorizontal: theme.spacing.sm,
   },
   entryPhotoActionButtonPressed: {
@@ -2503,7 +2500,7 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     textAlign: 'center',
   },
   entryPhotoHideButton: {
@@ -2518,19 +2515,27 @@ const styles = StyleSheet.create({
   },
   drawerBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(23, 33, 27, 0.18)',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
   categoryDrawer: {
-    borderTopLeftRadius: theme.radius.md,
-    borderTopRightRadius: theme.radius.md,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     backgroundColor: theme.color.surface,
     maxHeight: '92%',
   },
   categoryDrawerContent: {
     gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.xxl,
+  },
+  drawerHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: theme.color.border,
+    marginBottom: theme.spacing.sm,
   },
   categoryPaletteHeader: {
     flexDirection: 'row',
@@ -2540,7 +2545,7 @@ const styles = StyleSheet.create({
   categoryPaletteTitle: {
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   categoryPaletteRange: {
     color: theme.color.textMuted,
@@ -2559,27 +2564,27 @@ const styles = StyleSheet.create({
   rangeStepperButton: {
     flexBasis: '48%',
     flexGrow: 1,
-    minHeight: 44,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: theme.color.surfaceMuted,
     paddingHorizontal: theme.spacing.sm,
   },
   rangeStepperButtonPressed: {
     backgroundColor: theme.color.surfaceMuted,
   },
   rangeStepperButtonDisabled: {
-    backgroundColor: theme.color.surfaceMuted,
+    backgroundColor: theme.color.surface,
     opacity: 0.62,
   },
   rangeStepperButtonText: {
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
     textAlign: 'center',
   },
   rangeStepperButtonTextDisabled: {
@@ -2596,18 +2601,19 @@ const styles = StyleSheet.create({
   timeInputLabel: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   timeInput: {
     minHeight: 44,
-    borderWidth: 1,
+    borderWidth: 0,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
+    borderRadius: 0,
     backgroundColor: theme.color.surface,
     color: theme.color.text,
     fontSize: theme.typography.body,
-    fontWeight: '800',
-    paddingHorizontal: theme.spacing.md,
+    fontWeight: '500',
+    paddingHorizontal: 0,
   },
   timeInputInvalid: {
     borderColor: theme.color.danger,
@@ -2625,16 +2631,12 @@ const styles = StyleSheet.create({
   categoryEmptyState: {
     width: '100%',
     gap: theme.spacing.xs,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceMuted,
-    padding: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   categoryEmptyTitle: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   categoryEmptyDescription: {
     color: theme.color.textMuted,
@@ -2642,7 +2644,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   categoryButton: {
-    minHeight: 48,
+    minHeight: 42,
     minWidth: 96,
     justifyContent: 'center',
     borderWidth: 1,
@@ -2662,7 +2664,7 @@ const styles = StyleSheet.create({
     color: theme.color.surface,
     flexShrink: 1,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '600',
     textAlign: 'center',
   },
   editFieldGroup: {
@@ -2681,10 +2683,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.danger,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
     paddingHorizontal: theme.spacing.md,
   },
   deleteActionButtonPressed: {
@@ -2697,22 +2699,20 @@ const styles = StyleSheet.create({
     color: theme.color.danger,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
     textAlign: 'center',
   },
   deleteConfirmBox: {
     gap: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.color.danger,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    padding: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.md,
   },
   deleteConfirmTitle: {
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
   },
   deleteConfirmButton: {
     flex: 1,
@@ -2730,7 +2730,7 @@ const styles = StyleSheet.create({
     color: theme.color.surface,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
     textAlign: 'center',
   },
   primaryActionButton: {
@@ -2752,7 +2752,7 @@ const styles = StyleSheet.create({
     color: theme.color.surface,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
     textAlign: 'center',
   },
   secondaryActionButton: {
@@ -2760,10 +2760,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.color.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
+    backgroundColor: 'transparent',
     paddingHorizontal: theme.spacing.md,
   },
   secondaryActionButtonPressed: {
@@ -2773,7 +2773,7 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     flexShrink: 1,
     fontSize: theme.typography.body,
-    fontWeight: '900',
+    fontWeight: '600',
     textAlign: 'center',
   },
   categorySaveStatus: {

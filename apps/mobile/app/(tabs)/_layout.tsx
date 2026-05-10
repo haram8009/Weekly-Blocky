@@ -15,8 +15,8 @@ export default function TabLayout() {
           borderTopColor: theme.color.border,
         },
         tabBarLabelStyle: {
-          fontSize: theme.typography.caption,
-          fontWeight: '700',
+          fontSize: 12,
+          fontWeight: '500',
         },
       }}
     >

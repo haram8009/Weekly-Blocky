@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   keyboardAvoidingView: {
-    gap: theme.spacing.xxl,
+    gap: theme.spacing.xl,
   },
   header: {
     gap: theme.spacing.md,
@@ -132,12 +132,12 @@ const styles = StyleSheet.create({
   productName: {
     color: theme.color.primary,
     fontSize: theme.typography.body,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   title: {
     color: theme.color.text,
     fontSize: theme.typography.heading,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 30,
   },
   description: {
@@ -147,11 +147,9 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: theme.spacing.lg,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surface,
-    padding: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.lg,
   },
   modeSwitch: {
     flexDirection: 'row',
@@ -163,17 +161,18 @@ const styles = StyleSheet.create({
   label: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
-    fontWeight: '800',
+    fontWeight: '500',
   },
   input: {
     minHeight: 48,
-    borderWidth: 1,
+    borderWidth: 0,
+    borderBottomWidth: 1,
     borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
+    borderRadius: 0,
     backgroundColor: theme.color.surface,
     color: theme.color.text,
     fontSize: theme.typography.body,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: 0,
   },
   disabledButton: {
     opacity: 0.56,
