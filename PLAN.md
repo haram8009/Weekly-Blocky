@@ -569,10 +569,10 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 ### 4. 썸네일
 
-- [ ] `expo-image-manipulator` 연결
-- [ ] 로컬 썸네일 생성
-- [ ] `thumbnailLocalUri` 저장
-- [ ] 원본 `localUri`는 서버 저장 제외
+- [x] `expo-image-manipulator` 연결
+- [x] 로컬 썸네일 생성
+- [x] `thumbnailLocalUri` 저장
+- [x] 원본 `localUri`는 서버 저장 제외
 - [ ] 한 기록에 최대 3개 썸네일 우선 표시
 - [ ] 더 많은 사진은 기록 상세에서 표시
 - [ ] 썸네일 캐시 삭제 또는 재생성 정책 작성

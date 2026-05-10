@@ -20,6 +20,7 @@
     "expo": "~55.0.23",
     "expo-constants": "~55.0.16",
     "expo-haptics": "~55.0.14",
+    "expo-image-manipulator": "~55.0.16",
     "expo-linking": "~55.0.15",
     "expo-media-library": "~55.0.16",
     "expo-router": "~55.0.14",

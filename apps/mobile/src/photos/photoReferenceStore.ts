@@ -8,6 +8,9 @@ import {
 import { getLocalDatabase } from '@/lib/db/client';
 import { initializeLocalDatabase } from '@/lib/db/initialize';
 import type { DatePhotoAsset } from './datePhotoAssets';
+import { createLocalPhotoThumbnail } from './thumbnails';
+
+const MAX_THUMBNAIL_CANDIDATES_PER_ENTRY = 3;
 
 type PhotoReferenceRow = {
   id: string;
@@ -121,6 +124,10 @@ WHERE id = ? AND userId = ?
     }
   });
 
+  const nextReferences = await listPhotoReferencesByDate(userId, date);
+
+  await ensureLocalThumbnails(userId, nextReferences, now);
+
   return listPhotoReferencesByDate(userId, date);
 }
 
@@ -148,6 +155,69 @@ ORDER BY capturedAt ASC, id ASC
 
 function createPhotoReferenceId(userId: EntityId, localAssetId: string): EntityId {
   return `photo:${userId}:${localAssetId}`;
+}
+
+async function ensureLocalThumbnails(
+  userId: EntityId,
+  references: readonly PhotoReference[],
+  updatedAt: string,
+): Promise<void> {
+  const database = await getLocalDatabase();
+  const candidateReferences = selectThumbnailCandidateReferences(references);
+
+  for (const reference of candidateReferences) {
+    if (!reference.localUri) {
+      continue;
+    }
+
+    try {
+      const thumbnail = await createLocalPhotoThumbnail(reference.localUri);
+
+      await database.runAsync(
+        `
+UPDATE photoReferences
+SET thumbnailLocalUri = ?, updatedAt = ?
+WHERE id = ? AND userId = ?
+`,
+        thumbnail.uri,
+        updatedAt,
+        reference.id,
+        userId,
+      );
+    } catch {
+      // Thumbnail generation is best-effort; photo references remain useful without it.
+    }
+  }
+}
+
+function selectThumbnailCandidateReferences(
+  references: readonly PhotoReference[],
+): PhotoReference[] {
+  const countByEntryId = new Map<EntityId, number>();
+  const candidates: PhotoReference[] = [];
+
+  for (const reference of references) {
+    if (
+      !reference.entryId ||
+      reference.isHidden ||
+      reference.deletedAt ||
+      reference.thumbnailLocalUri ||
+      !reference.localUri
+    ) {
+      continue;
+    }
+
+    const currentCount = countByEntryId.get(reference.entryId) ?? 0;
+
+    if (currentCount >= MAX_THUMBNAIL_CANDIDATES_PER_ENTRY) {
+      continue;
+    }
+
+    candidates.push(reference);
+    countByEntryId.set(reference.entryId, currentCount + 1);
+  }
+
+  return candidates;
 }
 
 function mapPhotoReferenceRow(row: PhotoReferenceRow): PhotoReference {
