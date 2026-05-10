@@ -1,5 +1,6 @@
 'use client';
 
+import { getSupabaseStorageErrorMessage } from '@weekly/data';
 import {
   addDaysToDate,
   buildWeekGrid,
@@ -152,9 +153,7 @@ export default function WeekPage() {
       }
 
       setReviewSaveState('error');
-      setReviewSaveErrorMessage(
-        error instanceof Error ? error.message : '주간 회고를 저장하지 못했습니다.',
-      );
+      setReviewSaveErrorMessage(getSupabaseStorageErrorMessage(error));
     }
   }, [reviewDraft, visibleWeekStartDate]);
 
