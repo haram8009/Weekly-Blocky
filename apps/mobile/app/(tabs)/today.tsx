@@ -13,6 +13,7 @@ import {
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
 } from '@weekly/domain';
+import { getSupabaseStorageErrorMessage } from '@weekly/data';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +37,7 @@ import {
 import { Screen } from '@/components/Screen';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
-import { listMobileTimeEntriesByDate } from '@/lib/supabase/timeEntries';
+import { createMobileTimeEntry, listMobileTimeEntriesByDate } from '@/lib/supabase/timeEntries';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
@@ -49,6 +50,7 @@ import {
   expandTimeRangeSelection,
 } from '@/timeRangeSelection';
 import {
+  createCategoryPaletteItems,
   createDailyEntryListItems,
   createDailySummary,
   formatDuration,
@@ -70,6 +72,7 @@ type SelectionDraft = {
 };
 
 type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
+type EntrySaveState = 'idle' | 'saving' | 'error';
 
 export default function TodayScreen() {
   const searchParams = useLocalSearchParams();
@@ -112,6 +115,8 @@ export default function TodayScreen() {
   const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
+  const [entrySaveState, setEntrySaveState] = useState<EntrySaveState>('idle');
+  const [entrySaveErrorMessage, setEntrySaveErrorMessage] = useState<string | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const isTodaySelected = selectedDate === todayDate;
   const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
@@ -119,16 +124,25 @@ export default function TodayScreen() {
     () => createDailyEntryListItems(dayEntries, categories),
     [categories, dayEntries],
   );
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
   const dailySummary = useMemo(
     () => createDailySummary(dayEntries, categories, visibleMinutes),
     [categories, dayEntries, visibleMinutes],
+  );
+  const categoryPaletteItems = useMemo(
+    () => createCategoryPaletteItems(categories, dayEntries),
+    [categories, dayEntries],
   );
   const draftSelection = useMemo(
     () => createSelectedRange(blocks, selectionDraft),
     [blocks, selectionDraft],
   );
   const displayedSelection = draftSelection ?? confirmedSelection;
-  const canApplySelectedRange = confirmedSelection !== null && timeInputError === null;
+  const canApplySelectedRange =
+    confirmedSelection !== null && timeInputError === null && entrySaveState !== 'saving';
   const canMoveSelectionStartEarlier =
     confirmedSelection !== null &&
     expandTimeRangeSelection(blocks, confirmedSelection, 'start', -1) !== null;
@@ -182,6 +196,8 @@ export default function TodayScreen() {
     setTimeInputStart('');
     setTimeInputEnd('');
     setTimeInputError(null);
+    setEntrySaveState('idle');
+    setEntrySaveErrorMessage(null);
     selectionDraftRef.current = null;
     setSelectionDraft(null);
   }, [selectedDate]);
@@ -194,6 +210,8 @@ export default function TodayScreen() {
     setTimeInputStart(confirmedSelection.startTime);
     setTimeInputEnd(confirmedSelection.endTime);
     setTimeInputError(null);
+    setEntrySaveState('idle');
+    setEntrySaveErrorMessage(null);
   }, [confirmedSelection]);
 
   useEffect(() => {
@@ -210,10 +228,7 @@ export default function TodayScreen() {
 
     setDayEntriesLoadState('loading');
 
-    void Promise.all([
-      listMobileTimeEntriesByDate(selectedDate),
-      listMobileCategories({ includeArchived: true }),
-    ])
+    void loadSelectedDateData(selectedDate)
       .then(([nextEntries, nextCategories]) => {
         if (!isActive) {
           return;
@@ -413,6 +428,8 @@ export default function TodayScreen() {
     setTimeInputStart('');
     setTimeInputEnd('');
     setTimeInputError(null);
+    setEntrySaveState('idle');
+    setEntrySaveErrorMessage(null);
   }
 
   function finishTapSelectionAtPoint(releasePoint: WeekGridSlotPoint) {
@@ -476,6 +493,35 @@ export default function TodayScreen() {
     }
 
     setTimeInputError(result.errorMessage);
+  }
+
+  async function applyCategoryToSelection(categoryId: string) {
+    if (!confirmedSelection || timeInputError || entrySaveState === 'saving') {
+      return;
+    }
+
+    const selection = confirmedSelection;
+
+    setEntrySaveState('saving');
+    setEntrySaveErrorMessage(null);
+
+    try {
+      await createMobileTimeEntry({
+        date: selectedDate,
+        startTime: selection.startTime,
+        endTime: selection.endTime,
+        categoryId,
+      });
+
+      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      setDayEntries(nextEntries);
+      setCategories(nextCategories);
+      setDayEntriesLoadState('ready');
+      clearConfirmedSelection();
+    } catch (error) {
+      setEntrySaveState('error');
+      setEntrySaveErrorMessage(getSupabaseStorageErrorMessage(error));
+    }
   }
 
   function measureBlockGridBounds(onMeasured?: (bounds: WeekGridSlotBounds) => void) {
@@ -739,19 +785,27 @@ export default function TodayScreen() {
           >
             {hourlyRows.map((row) => (
               <View key={row.hourLabel} style={styles.hourBlocks}>
-                {row.blocks.map((block) => (
-                  <View key={block.id} style={styles.blockContainer}>
-                    <Animated.View
-                      style={[
-                        styles.emptyBlock,
-                        isBlockSelected(block.slotIndex, displayedSelection) &&
-                          styles.selectedBlock,
-                        isBlockSelected(block.slotIndex, displayedSelection) &&
-                          selectedBlockPulseStyle,
-                      ]}
-                    />
-                  </View>
-                ))}
+                {row.blocks.map((block) => {
+                  const blockEntry = getEntryCoveringBlock(block, dayEntries);
+                  const blockCategory = blockEntry ? categoryById.get(blockEntry.categoryId) : null;
+                  const isSelected = isBlockSelected(block.slotIndex, displayedSelection);
+
+                  return (
+                    <View key={block.id} style={styles.blockContainer}>
+                      <Animated.View
+                        style={[
+                          styles.emptyBlock,
+                          blockCategory && {
+                            backgroundColor: blockCategory.color,
+                            borderColor: blockCategory.color,
+                          },
+                          isSelected && styles.selectedBlock,
+                          isSelected && selectedBlockPulseStyle,
+                        ]}
+                      />
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -899,32 +953,70 @@ export default function TodayScreen() {
               {timeInputError ? <Text style={styles.timeInputError}>{timeInputError}</Text> : null}
             </View>
             <View style={styles.categoryButtonList}>
-              {EXAMPLE_CATEGORY_DEFINITIONS.map((category) => (
-                <Pressable
-                  key={category.key}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: !canApplySelectedRange }}
-                  disabled={!canApplySelectedRange}
-                  style={({ pressed }) => [
-                    styles.categoryButton,
-                    {
-                      backgroundColor: category.color,
-                      borderColor: category.color,
-                    },
-                    !canApplySelectedRange && styles.categoryButtonDisabled,
-                    pressed && canApplySelectedRange && styles.categoryButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.categoryButtonText}>
-                    {category.emoji} {category.name}
+              {categoryPaletteItems.length === 0 ? (
+                <View style={styles.categoryEmptyState}>
+                  <Text style={styles.categoryEmptyTitle}>저장된 카테고리가 없습니다.</Text>
+                  <Text style={styles.categoryEmptyDescription}>
+                    예시:{' '}
+                    {EXAMPLE_CATEGORY_DEFINITIONS.slice(0, 4)
+                      .map((category) => `${category.emoji} ${category.name}`)
+                      .join(', ')}
                   </Text>
-                </Pressable>
-              ))}
+                </View>
+              ) : (
+                categoryPaletteItems.map((category) => (
+                  <Pressable
+                    key={category.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !canApplySelectedRange }}
+                    disabled={!canApplySelectedRange}
+                    onPress={() => void applyCategoryToSelection(category.id)}
+                    style={({ pressed }) => [
+                      styles.categoryButton,
+                      {
+                        backgroundColor: category.color,
+                        borderColor: category.color,
+                      },
+                      !canApplySelectedRange && styles.categoryButtonDisabled,
+                      pressed && canApplySelectedRange && styles.categoryButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.categoryButtonText}>
+                      {category.emoji} {category.name}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
             </View>
+            {entrySaveState === 'saving' ? (
+              <Text style={styles.categorySaveStatus}>기록을 저장하고 있습니다.</Text>
+            ) : null}
+            {entrySaveErrorMessage ? (
+              <Text style={styles.categorySaveError}>{entrySaveErrorMessage}</Text>
+            ) : null}
           </View>
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+function loadSelectedDateData(date: DateString): Promise<[TimeEntry[], Category[]]> {
+  return Promise.all([
+    listMobileTimeEntriesByDate(date),
+    listMobileCategories({ includeArchived: true }),
+  ]);
+}
+
+function getEntryCoveringBlock(
+  block: WeekGridBlock,
+  entries: readonly TimeEntry[],
+): TimeEntry | null {
+  return (
+    entries.find(
+      (entry) =>
+        !entry.deletedAt && entry.startTime <= block.startTime && entry.endTime >= block.endTime,
+    ) ?? null
   );
 }
 
@@ -1386,6 +1478,25 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
+  categoryEmptyState: {
+    width: '100%',
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surfaceMuted,
+    padding: theme.spacing.md,
+  },
+  categoryEmptyTitle: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '900',
+  },
+  categoryEmptyDescription: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+  },
   categoryButton: {
     minHeight: 44,
     justifyContent: 'center',
@@ -1403,5 +1514,15 @@ const styles = StyleSheet.create({
     color: theme.color.surface,
     fontSize: theme.typography.caption,
     fontWeight: '800',
+  },
+  categorySaveStatus: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+  },
+  categorySaveError: {
+    color: theme.color.danger,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
   },
 });

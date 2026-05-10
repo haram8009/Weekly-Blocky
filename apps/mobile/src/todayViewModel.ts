@@ -25,10 +25,19 @@ export type DailySummary = {
 };
 
 type CategoryLike = Pick<Category, 'id' | 'name' | 'emoji' | 'color'>;
+type CategoryPaletteCategoryLike = Pick<
+  Category,
+  'id' | 'name' | 'emoji' | 'color' | 'sortOrder' | 'isArchived' | 'deletedAt'
+>;
 type TimeEntryLike = Pick<
   TimeEntry,
   'id' | 'startTime' | 'endTime' | 'categoryId' | 'note' | 'deletedAt'
 >;
+type CategoryPaletteEntryLike = Pick<
+  TimeEntry,
+  'categoryId' | 'startTime' | 'endTime' | 'deletedAt'
+> &
+  Partial<Pick<TimeEntry, 'updatedAt'>>;
 
 const FALLBACK_CATEGORY = {
   name: '카테고리 없음',
@@ -108,6 +117,47 @@ export function createDailySummary(
     completionRate: visibleMinutes > 0 ? Math.round((recordedMinutes / visibleMinutes) * 100) : 0,
     topCategoryLabel: topCategory ? topCategory[0] : null,
   };
+}
+
+export function createCategoryPaletteItems(
+  categories: readonly CategoryPaletteCategoryLike[],
+  entries: readonly CategoryPaletteEntryLike[],
+): CategoryPaletteCategoryLike[] {
+  const latestUsageByCategoryId = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (entry.deletedAt) {
+      continue;
+    }
+
+    const usageScore = entry.updatedAt ?? `${entry.endTime}-${entry.startTime}`;
+    const previousUsageScore = latestUsageByCategoryId.get(entry.categoryId);
+
+    if (!previousUsageScore || usageScore > previousUsageScore) {
+      latestUsageByCategoryId.set(entry.categoryId, usageScore);
+    }
+  }
+
+  return categories
+    .filter((category) => !category.deletedAt && !category.isArchived)
+    .sort((first, second) => {
+      const firstUsageScore = latestUsageByCategoryId.get(first.id);
+      const secondUsageScore = latestUsageByCategoryId.get(second.id);
+
+      if (firstUsageScore && secondUsageScore && firstUsageScore !== secondUsageScore) {
+        return secondUsageScore.localeCompare(firstUsageScore);
+      }
+
+      if (firstUsageScore && !secondUsageScore) {
+        return -1;
+      }
+
+      if (!firstUsageScore && secondUsageScore) {
+        return 1;
+      }
+
+      return first.sortOrder - second.sortOrder || first.name.localeCompare(second.name);
+    });
 }
 
 export function formatDuration(minutes: number): string {

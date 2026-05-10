@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createCategoryPaletteItems,
   createDailyEntryListItems,
   createDailySummary,
   formatDuration,
@@ -94,6 +95,65 @@ describe('createDailySummary', () => {
       completionRate: 30,
       topCategoryLabel: '주요 업무',
     });
+  });
+});
+
+describe('createCategoryPaletteItems', () => {
+  const paletteCategories = [
+    {
+      id: 'rest',
+      name: '휴식',
+      emoji: '☕',
+      color: '#64748B',
+      sortOrder: 20,
+      isArchived: false,
+      deletedAt: null,
+    },
+    {
+      id: 'work',
+      name: '주요 업무',
+      emoji: '💼',
+      color: '#2563EB',
+      sortOrder: 10,
+      isArchived: false,
+      deletedAt: null,
+    },
+    {
+      id: 'archived',
+      name: '보관됨',
+      emoji: '📦',
+      color: '#94A3B8',
+      sortOrder: 0,
+      isArchived: true,
+      deletedAt: null,
+    },
+  ];
+
+  it('hides archived categories and sorts unused categories by display order', () => {
+    expect(
+      createCategoryPaletteItems(paletteCategories, []).map((category) => category.id),
+    ).toEqual(['work', 'rest']);
+  });
+
+  it('moves recently used categories to the top', () => {
+    expect(
+      createCategoryPaletteItems(paletteCategories, [
+        {
+          categoryId: 'work',
+          startTime: '09:00',
+          endTime: '10:00',
+          updatedAt: '2026-05-10T01:00:00.000Z',
+          deletedAt: null,
+        },
+        {
+          categoryId: 'rest',
+          startTime: '10:00',
+          endTime: '10:30',
+          updatedAt: '2026-05-10T02:00:00.000Z',
+          deletedAt: null,
+        },
+      ]).map((category) => category.id),
+    ).toEqual(['rest', 'work']);
   });
 });
 
