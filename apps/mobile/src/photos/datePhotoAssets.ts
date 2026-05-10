@@ -61,7 +61,7 @@ export function mapMediaLibraryAssetToDatePhotoAsset(
   return {
     id: asset.id,
     localAssetId: asset.id,
-    capturedAt: new Date(creationTime).toISOString(),
+    capturedAt: formatLocalTimestamp(new Date(creationTime)),
     localUri: asset.uri ?? null,
     width: typeof asset.width === 'number' ? asset.width : null,
     height: typeof asset.height === 'number' ? asset.height : null,
@@ -74,4 +74,19 @@ function createLocalDateStart(date: DateString): Date {
   const [yearText, monthText, dayText] = date.split('-');
 
   return new Date(Number(yearText), Number(monthText) - 1, Number(dayText), 0, 0, 0, 0);
+}
+
+function formatLocalTimestamp(date: Date): string {
+  return (
+    [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-') +
+    `T${[
+      String(date.getHours()).padStart(2, '0'),
+      String(date.getMinutes()).padStart(2, '0'),
+      String(date.getSeconds()).padStart(2, '0'),
+    ].join(':')}`
+  );
 }

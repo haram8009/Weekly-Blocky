@@ -558,13 +558,13 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 ### 3. 사진 매칭
 
-- [ ] `PhotoMatcher` 모듈 생성
-- [ ] `capturedAt >= entry.startDateTime` 조건 적용
-- [ ] `capturedAt < entry.endDateTime` 조건 적용
-- [ ] 날짜가 같은 기록만 매칭
-- [ ] 수정된 기록의 시간 범위에 맞게 재매칭
-- [ ] 삭제된 기록의 사진 참조 미연결 처리
-- [ ] 숨김 처리된 사진은 매칭 결과에서 제외
+- [x] `PhotoMatcher` 모듈 생성
+- [x] `capturedAt >= entry.startDateTime` 조건 적용
+- [x] `capturedAt < entry.endDateTime` 조건 적용
+- [x] 날짜가 같은 기록만 매칭
+- [x] 수정된 기록의 시간 범위에 맞게 재매칭
+- [x] 삭제된 기록의 사진 참조 미연결 처리
+- [x] 숨김 처리된 사진은 매칭 결과에서 제외
 - [ ] 자동 매칭과 수동 연결을 구분하는 `matchType` 저장
 
 ### 4. 썸네일

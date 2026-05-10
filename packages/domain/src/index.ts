@@ -128,5 +128,6 @@ export type SyncState = {
 
 export * from './defaults';
 export * from './entryOverlap';
+export * from './photoMatcher';
 export * from './time';
 export * from './weekGrid';
