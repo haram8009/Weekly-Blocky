@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  addDaysToDate,
   formatMinutesToTime,
   getDatesOfWeek,
   getWeekStartDate,
@@ -106,6 +107,16 @@ describe('time utilities', () => {
       expect(getWeekStartDate('2026-05-07', 'sunday')).toBe('2026-05-03');
       expect(getWeekStartDate('2026-05-10', 'monday')).toBe('2026-05-04');
       expect(getWeekStartDate('2026-05-10', 'sunday')).toBe('2026-05-10');
+    });
+
+    it('날짜에 일수를 더해 이전 주와 다음 주 이동 날짜를 계산한다', () => {
+      expect(addDaysToDate('2026-05-04', -7)).toBe('2026-04-27');
+      expect(addDaysToDate('2026-05-04', 7)).toBe('2026-05-11');
+      expect(addDaysToDate('2026-12-29', 7)).toBe('2027-01-05');
+    });
+
+    it('더할 일수는 정수만 허용한다', () => {
+      expect(() => addDaysToDate('2026-05-04', 1.5)).toThrow();
     });
   });
 

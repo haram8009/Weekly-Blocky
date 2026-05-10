@@ -133,6 +133,17 @@ export function getDatesOfWeek(weekStartDate: string): string[] {
   });
 }
 
+export function addDaysToDate(date: string, days: number): string {
+  if (!Number.isInteger(days)) {
+    throw new Error(`더할 일수는 정수여야 합니다: ${days}`);
+  }
+
+  const parsedDate = parseDateString(date);
+  parsedDate.setUTCDate(parsedDate.getUTCDate() + days);
+
+  return formatDateString(parsedDate);
+}
+
 export function isCapturedWithinEntry(capturedAt: string, entry: TimeRangeEntryLike): boolean {
   const captured = parseCapturedAt(capturedAt);
 
