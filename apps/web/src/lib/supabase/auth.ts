@@ -5,6 +5,36 @@ export type SupabaseAuthConnectionResult = {
   errorMessage: string | null;
 };
 
+export async function signInWithEmail(email: string, password: string) {
+  const { error } = await getSupabaseClient().auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function signUpWithEmail(email: string, password: string) {
+  const { error } = await getSupabaseClient().auth.signUp({
+    email: email.trim(),
+    password,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function signOut() {
+  const { error } = await getSupabaseClient().auth.signOut();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function checkBrowserSupabaseAuthConnection(): Promise<SupabaseAuthConnectionResult> {
   try {
     const { error } = await getSupabaseClient().auth.getSession();

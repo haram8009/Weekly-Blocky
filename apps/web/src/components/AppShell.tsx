@@ -1,6 +1,12 @@
-import Link from 'next/link';
-import type { ReactNode } from 'react';
+'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+
+import { signOut } from '@/lib/supabase/auth';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import styles from './AppShell.module.css';
 
 const navItems = [
@@ -12,6 +18,73 @@ const navItems = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+    const client = getSupabaseClient();
+
+    client.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!isActive) {
+          return;
+        }
+
+        if (!data.session) {
+          router.replace('/login');
+          return;
+        }
+
+        setEmail(data.session.user.email ?? null);
+        setIsCheckingSession(false);
+      })
+      .catch(() => {
+        if (isActive) {
+          router.replace('/login');
+        }
+      });
+
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace('/login');
+        return;
+      }
+
+      setEmail(session.user.email ?? null);
+      setIsCheckingSession(false);
+    });
+
+    return () => {
+      isActive = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+
+    try {
+      await signOut();
+      router.replace('/login');
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
+  if (isCheckingSession) {
+    return (
+      <div className={styles.shell}>
+        <main className={styles.loading}>세션을 확인하고 있습니다.</main>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -25,6 +98,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        <div className={styles.account}>
+          <span>{email ?? '로그인됨'}</span>
+          <button disabled={isSigningOut} onClick={() => void handleSignOut()} type="button">
+            {isSigningOut ? '로그아웃 중' : '로그아웃'}
+          </button>
+        </div>
       </header>
       <div className={styles.content}>{children}</div>
     </div>

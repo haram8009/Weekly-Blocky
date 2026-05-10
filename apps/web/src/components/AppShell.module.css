@@ -43,10 +43,55 @@
   color: #17211b;
 }
 
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #627168;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  color: #17211b;
+  background: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.account button:hover {
+  background: #eef3f1;
+}
+
+.account button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .content {
   width: min(100%, 1280px);
   margin: 0 auto;
   padding: 32px;
+}
+
+.loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: #627168;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 @media (max-width: 760px) {
@@ -61,6 +106,11 @@
     overflow-x: auto;
     width: 100%;
     padding-bottom: 4px;
+  }
+
+  .account {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .navItem {

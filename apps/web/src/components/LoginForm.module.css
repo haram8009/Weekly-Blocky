@@ -7,6 +7,35 @@
   background: #ffffff;
 }
 
+.modeSwitch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modeButton,
+.modeButtonActive {
+  min-height: 44px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modeButton {
+  color: #17211b;
+  background: #ffffff;
+}
+
+.modeButton:hover {
+  background: #eef3f1;
+}
+
+.modeButtonActive {
+  color: #ffffff;
+  background: #236c5c;
+}
+
 .form label {
   display: grid;
   gap: 8px;
