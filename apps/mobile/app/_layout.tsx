@@ -1,8 +1,10 @@
-import { Stack, type ErrorBoundaryProps } from 'expo-router';
+import { Stack, useRouter, useSegments, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect, type PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { MobileAuthProvider, useMobileAuth } from '@/auth/MobileAuthProvider';
 import { LocalSettingsProvider } from '@/settings/LocalSettingsProvider';
 import { theme } from '@/theme';
 
@@ -23,27 +25,58 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <LocalSettingsProvider>
-        <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: {
-              backgroundColor: theme.color.background,
-            },
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              gestureEnabled: false,
-            }}
-          />
-        </Stack>
-      </LocalSettingsProvider>
+      <MobileAuthProvider>
+        <LocalSettingsProvider>
+          <AuthRouteGuard>
+            <StatusBar style="dark" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: {
+                  backgroundColor: theme.color.background,
+                },
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen
+                name="(tabs)"
+                options={{
+                  gestureEnabled: false,
+                }}
+              />
+            </Stack>
+          </AuthRouteGuard>
+        </LocalSettingsProvider>
+      </MobileAuthProvider>
     </SafeAreaProvider>
   );
+}
+
+function AuthRouteGuard({ children }: PropsWithChildren) {
+  const { status } = useMobileAuth();
+  const router = useRouter();
+  const segments = useSegments();
+  const firstSegment = segments[0];
+
+  useEffect(() => {
+    if (status === 'loading') {
+      return;
+    }
+
+    const isPublicRoute = !firstSegment || firstSegment === 'login';
+
+    if (status === 'authenticated' && isPublicRoute) {
+      router.replace('/today');
+      return;
+    }
+
+    if (status !== 'authenticated' && firstSegment === '(tabs)') {
+      router.replace('/login');
+    }
+  }, [firstSegment, router, status]);
+
+  return children;
 }
 
 const styles = StyleSheet.create({
