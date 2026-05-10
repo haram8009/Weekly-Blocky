@@ -8,6 +8,7 @@ import {
   WEEK_GRID_SLOT_MINUTES,
   type Category,
   type DateString,
+  type PhotoReference,
   type TimeEntry,
   type WeekGridBlock,
   type WeekReview,
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 
 import { AppShell } from '@/components/AppShell';
 import { listWebCategories } from '@/lib/supabase/categories';
+import { listWebPhotoReferencesByWeek } from '@/lib/supabase/photoReferences';
 import { listWebTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
 import { getWebWeekReviewByWeekStartDate, upsertWebWeekReview } from '@/lib/supabase/weekReviews';
 import styles from './page.module.css';
@@ -57,6 +59,7 @@ export default function WeekPage() {
   );
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [photoReferences, setPhotoReferences] = useState<PhotoReference[]>([]);
   const [loadState, setLoadState] = useState<WeekLoadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [summaryMode, setSummaryMode] = useState<WeekSummaryMode>('name');
@@ -77,6 +80,10 @@ export default function WeekPage() {
     [categories],
   );
   const visibleEntries = useMemo(() => entries.filter((entry) => !entry.deletedAt), [entries]);
+  const photoReferencesByEntryId = useMemo(
+    () => groupRemotePhotoReferencesByEntryId(photoReferences),
+    [photoReferences],
+  );
   const weeklySummary = useMemo(
     () => createWeeklySummary(visibleEntries, categories, weekGrid),
     [categories, visibleEntries, weekGrid],
@@ -169,14 +176,19 @@ export default function WeekPage() {
     setLoadState('loading');
     setErrorMessage(null);
 
-    Promise.all([listWebTimeEntriesByWeek(visibleWeekStartDate), listWebCategories()])
-      .then(([nextEntries, nextCategories]) => {
+    Promise.all([
+      listWebTimeEntriesByWeek(visibleWeekStartDate),
+      listWebCategories(),
+      listWebPhotoReferencesByWeek(visibleWeekStartDate),
+    ])
+      .then(([nextEntries, nextCategories, nextPhotoReferences]) => {
         if (!isActive) {
           return;
         }
 
         setEntries(nextEntries);
         setCategories(nextCategories);
+        setPhotoReferences(nextPhotoReferences);
         setLoadState('ready');
       })
       .catch((error) => {
@@ -186,6 +198,7 @@ export default function WeekPage() {
 
         setEntries([]);
         setCategories([]);
+        setPhotoReferences([]);
         setLoadState('error');
         setErrorMessage(
           error instanceof Error ? error.message : '주간 기록을 불러오지 못했습니다.',
@@ -269,6 +282,7 @@ export default function WeekPage() {
                 categoryById={categoryById}
                 entries={visibleEntries}
                 key={slotIndex}
+                photoReferencesByEntryId={photoReferencesByEntryId}
                 slotIndex={slotIndex}
                 weekDays={weekGrid.days}
               />
@@ -429,11 +443,13 @@ export default function WeekPage() {
 function Row({
   categoryById,
   entries,
+  photoReferencesByEntryId,
   slotIndex,
   weekDays,
 }: {
   categoryById: Map<string, Category>;
   entries: readonly TimeEntry[];
+  photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>;
   slotIndex: number;
   weekDays: ReturnType<typeof buildWeekGrid>['days'];
 }) {
@@ -447,6 +463,10 @@ function Row({
         const block = day.blocks[slotIndex];
         const entry = block ? getEntryCoveringBlock(block, entries) : null;
         const category = entry ? categoryById.get(entry.categoryId) : null;
+        const entryPhotoReferences =
+          entry && block?.startTime === entry.startTime
+            ? (photoReferencesByEntryId.get(entry.id) ?? [])
+            : [];
 
         return (
           <div
@@ -464,11 +484,53 @@ function Row({
                 : undefined
             }
             title={entry ? `${entry.startTime}-${entry.endTime} ${category?.name ?? ''}` : ''}
-          />
+          >
+            {entryPhotoReferences.length > 0 ? (
+              <BlockPhotoIndicator references={entryPhotoReferences} />
+            ) : null}
+          </div>
         );
       })}
     </>
   );
+}
+
+function BlockPhotoIndicator({ references }: { references: readonly PhotoReference[] }) {
+  const firstReference = references.find((reference) => reference.thumbnailRemoteUrl);
+
+  if (!firstReference?.thumbnailRemoteUrl) {
+    return null;
+  }
+
+  return (
+    <span className={styles.blockPhotoBadge} title={`사진 ${references.length}개`}>
+      <img alt="" aria-hidden="true" src={firstReference.thumbnailRemoteUrl} />
+      {references.length > 1 ? <span>{formatCompactPhotoCount(references.length)}</span> : null}
+    </span>
+  );
+}
+
+function groupRemotePhotoReferencesByEntryId(
+  references: readonly PhotoReference[],
+): Map<string, PhotoReference[]> {
+  const referencesByEntryId = new Map<string, PhotoReference[]>();
+
+  for (const reference of references) {
+    if (
+      !reference.entryId ||
+      reference.isHidden ||
+      reference.deletedAt ||
+      !reference.thumbnailRemoteUrl
+    ) {
+      continue;
+    }
+
+    const currentReferences = referencesByEntryId.get(reference.entryId) ?? [];
+    currentReferences.push(reference);
+    referencesByEntryId.set(reference.entryId, currentReferences);
+  }
+
+  return referencesByEntryId;
 }
 
 function SummaryTotals({ totals }: { totals: readonly WeekSummaryTotal[] }) {
@@ -643,6 +705,10 @@ function formatDuration(minutes: number): string {
   }
 
   return `${hours}시간 ${remainingMinutes}분`;
+}
+
+function formatCompactPhotoCount(photoCount: number): string {
+  return photoCount > 9 ? '9+' : String(photoCount);
 }
 
 function createEmptyReviewDraft(): ReviewDraft {

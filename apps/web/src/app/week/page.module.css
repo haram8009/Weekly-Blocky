@@ -158,8 +158,39 @@
 }
 
 .blockCell {
+  position: relative;
   min-height: 10px;
   background: #f7f8fa;
+}
+
+.blockPhotoBadge {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 2px;
+  display: inline-flex;
+  overflow: hidden;
+  align-items: center;
+  gap: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #17211b;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.blockPhotoBadge img {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  object-fit: cover;
 }
 
 .blockCell:hover {

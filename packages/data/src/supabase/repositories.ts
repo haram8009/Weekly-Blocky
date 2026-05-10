@@ -82,6 +82,38 @@ export class SupabaseUserProfileRepository {
 export class SupabasePhotoReferenceRepository {
   constructor(private readonly client: SupabaseClient) {}
 
+  async listPhotoReferencesByWeek(weekStartDate: DateString): Promise<PhotoReference[]> {
+    const userId = await requireCurrentUserId(this.client);
+    const weekDates = getDatesOfWeek(weekStartDate);
+    const weekEndDate = weekDates[weekDates.length - 1];
+
+    if (!weekEndDate) {
+      throw new SupabaseStorageError(
+        'VALIDATION_FAILED',
+        '주간 사진 조회 기준 날짜가 올바르지 않습니다.',
+        'Week end date could not be calculated.',
+      );
+    }
+
+    const { data, error } = await this.client
+      .from('photo_references')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', weekStartDate)
+      .lte('date', weekEndDate)
+      .eq('is_hidden', false)
+      .is('deleted_at', null)
+      .not('thumbnail_remote_url', 'is', null)
+      .order('date', { ascending: true })
+      .order('captured_at', { ascending: true });
+
+    if (error) {
+      throw createSupabaseQueryError(READ_ERROR_MESSAGE, error);
+    }
+
+    return ((data ?? []) as SupabasePhotoReferenceRow[]).map(mapPhotoReferenceRow);
+  }
+
   async upsertPhotoReference(input: UpsertPhotoReferenceInput): Promise<PhotoReference> {
     const userId = await requireCurrentUserId(this.client);
     const now = input.now ?? new Date().toISOString();
@@ -607,6 +639,13 @@ export function updateSettings(
   return new SupabaseSettingsRepository(client).updateSettings(input);
 }
 
+export function listPhotoReferencesByWeek(
+  client: SupabaseClient,
+  weekStartDate: DateString,
+): Promise<PhotoReference[]> {
+  return new SupabasePhotoReferenceRepository(client).listPhotoReferencesByWeek(weekStartDate);
+}
+
 export function upsertPhotoReference(
   client: SupabaseClient,
   input: UpsertPhotoReferenceInput,
@@ -635,6 +674,22 @@ export async function uploadThumbnail(
 
 export function createThumbnailStoragePath(userId: string, photoReferenceId: string): string {
   return `${userId}/${encodeURIComponent(photoReferenceId)}.jpg`;
+}
+
+export async function createThumbnailSignedUrl(
+  client: SupabaseClient,
+  path: string,
+  expiresInSeconds = 60 * 60,
+): Promise<string> {
+  const { data, error } = await client.storage
+    .from(THUMBNAIL_STORAGE_BUCKET)
+    .createSignedUrl(path, expiresInSeconds);
+
+  if (error) {
+    throw createSupabaseQueryError(READ_ERROR_MESSAGE, error);
+  }
+
+  return data.signedUrl;
 }
 
 function toCategoryInsertPayload(
