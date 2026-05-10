@@ -22,6 +22,17 @@ export type DailySummary = {
   unrecordedMinutes: number;
   completionRate: number;
   topCategoryLabel: string | null;
+  totalsByColor: DailySummaryTotal[];
+  totalsByName: DailySummaryTotal[];
+  totalsByEmoji: DailySummaryTotal[];
+};
+
+export type DailySummaryTotal = {
+  key: string;
+  label: string;
+  color: string;
+  minutes: number;
+  ratio: number;
 };
 
 type CategoryLike = Pick<Category, 'id' | 'name' | 'emoji' | 'color'>;
@@ -97,26 +108,70 @@ export function createDailySummary(
   visibleMinutes: number,
 ): DailySummary {
   const items = createDailyEntryListItems(entries, categories);
-  const categoryMinutes = new Map<string, number>();
+  const totalsByColor = new Map<string, Omit<DailySummaryTotal, 'ratio'>>();
+  const totalsByName = new Map<string, Omit<DailySummaryTotal, 'ratio'>>();
+  const totalsByEmoji = new Map<string, Omit<DailySummaryTotal, 'ratio'>>();
   const recordedMinutes = items.reduce((totalMinutes, item) => {
-    categoryMinutes.set(
-      item.categoryName,
-      (categoryMinutes.get(item.categoryName) ?? 0) + item.durationMinutes,
-    );
+    addDailySummaryTotal(totalsByColor, {
+      key: item.categoryColor,
+      label: item.categoryColor,
+      color: item.categoryColor,
+      minutes: item.durationMinutes,
+    });
+    addDailySummaryTotal(totalsByName, {
+      key: item.categoryName,
+      label: item.categoryName,
+      color: item.categoryColor,
+      minutes: item.durationMinutes,
+    });
+    addDailySummaryTotal(totalsByEmoji, {
+      key: item.categoryEmoji,
+      label: `${item.categoryEmoji} ${item.categoryName}`,
+      color: item.categoryColor,
+      minutes: item.durationMinutes,
+    });
 
     return totalMinutes + item.durationMinutes;
   }, 0);
-  const topCategory = [...categoryMinutes.entries()].sort(
-    (first, second) => second[1] - first[1],
-  )[0];
+  const totalsByNameList = sortDailySummaryTotals(totalsByName, recordedMinutes);
+  const topCategory = totalsByNameList[0];
 
   return {
     entryCount: items.length,
     recordedMinutes,
     unrecordedMinutes: Math.max(visibleMinutes - recordedMinutes, 0),
     completionRate: visibleMinutes > 0 ? Math.round((recordedMinutes / visibleMinutes) * 100) : 0,
-    topCategoryLabel: topCategory ? topCategory[0] : null,
+    topCategoryLabel: topCategory ? topCategory.label : null,
+    totalsByColor: sortDailySummaryTotals(totalsByColor, recordedMinutes),
+    totalsByName: totalsByNameList,
+    totalsByEmoji: sortDailySummaryTotals(totalsByEmoji, recordedMinutes),
   };
+}
+
+function addDailySummaryTotal(
+  totals: Map<string, Omit<DailySummaryTotal, 'ratio'>>,
+  nextTotal: Omit<DailySummaryTotal, 'ratio'>,
+) {
+  const currentTotal = totals.get(nextTotal.key);
+
+  totals.set(nextTotal.key, {
+    ...nextTotal,
+    minutes: (currentTotal?.minutes ?? 0) + nextTotal.minutes,
+  });
+}
+
+function sortDailySummaryTotals(
+  totals: Map<string, Omit<DailySummaryTotal, 'ratio'>>,
+  recordedMinutes: number,
+): DailySummaryTotal[] {
+  return [...totals.values()]
+    .map((total) => ({
+      ...total,
+      ratio: recordedMinutes > 0 ? Math.round((total.minutes / recordedMinutes) * 100) : 0,
+    }))
+    .sort(
+      (first, second) => second.minutes - first.minutes || first.label.localeCompare(second.label),
+    );
 }
 
 export function createCategoryPaletteItems(

@@ -94,6 +94,54 @@ describe('createDailySummary', () => {
       unrecordedMinutes: 210,
       completionRate: 30,
       topCategoryLabel: '주요 업무',
+      totalsByColor: [
+        {
+          key: '#2563EB',
+          label: '#2563EB',
+          color: '#2563EB',
+          minutes: 60,
+          ratio: 67,
+        },
+        {
+          key: '#64748B',
+          label: '#64748B',
+          color: '#64748B',
+          minutes: 30,
+          ratio: 33,
+        },
+      ],
+      totalsByName: [
+        {
+          key: '주요 업무',
+          label: '주요 업무',
+          color: '#2563EB',
+          minutes: 60,
+          ratio: 67,
+        },
+        {
+          key: '휴식',
+          label: '휴식',
+          color: '#64748B',
+          minutes: 30,
+          ratio: 33,
+        },
+      ],
+      totalsByEmoji: [
+        {
+          key: '💼',
+          label: '💼 주요 업무',
+          color: '#2563EB',
+          minutes: 60,
+          ratio: 67,
+        },
+        {
+          key: '☕',
+          label: '☕ 휴식',
+          color: '#64748B',
+          minutes: 30,
+          ratio: 33,
+        },
+      ],
     });
   });
 });
