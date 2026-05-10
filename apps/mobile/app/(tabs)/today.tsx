@@ -916,6 +916,8 @@ export default function TodayScreen() {
         </Text>
       </View>
 
+      {renderDayStateBanner(dayEntriesLoadState)}
+
       <View style={styles.dayGrid}>
         <View style={styles.gridBody}>
           <View style={styles.timeLabelColumn}>
@@ -982,170 +984,179 @@ export default function TodayScreen() {
         <View style={styles.drawerOverlay}>
           <Pressable style={styles.drawerBackdrop} onPress={clearConfirmedSelection} />
           <View style={styles.categoryDrawer}>
-            <View style={styles.categoryPaletteHeader}>
-              <View>
-                <Text style={styles.categoryPaletteTitle}>카테고리</Text>
-                {confirmedSelection ? (
-                  <Text style={styles.categoryPaletteRange}>
-                    {confirmedSelection.startTime}-{confirmedSelection.endTime}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.timeRangeEditor}>
-              <View style={styles.rangeStepperGrid}>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canMoveSelectionStartEarlier}
-                  onPress={() => adjustConfirmedSelection('start', -1)}
-                  style={({ pressed }) => [
-                    styles.rangeStepperButton,
-                    !canMoveSelectionStartEarlier && styles.rangeStepperButtonDisabled,
-                    pressed && canMoveSelectionStartEarlier && styles.rangeStepperButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rangeStepperButtonText,
-                      !canMoveSelectionStartEarlier && styles.rangeStepperButtonTextDisabled,
-                    ]}
-                  >
-                    시작 -10분
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canMoveSelectionStartLater}
-                  onPress={() => adjustConfirmedSelection('start', 1)}
-                  style={({ pressed }) => [
-                    styles.rangeStepperButton,
-                    !canMoveSelectionStartLater && styles.rangeStepperButtonDisabled,
-                    pressed && canMoveSelectionStartLater && styles.rangeStepperButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rangeStepperButtonText,
-                      !canMoveSelectionStartLater && styles.rangeStepperButtonTextDisabled,
-                    ]}
-                  >
-                    시작 +10분
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canMoveSelectionEndEarlier}
-                  onPress={() => adjustConfirmedSelection('end', -1)}
-                  style={({ pressed }) => [
-                    styles.rangeStepperButton,
-                    !canMoveSelectionEndEarlier && styles.rangeStepperButtonDisabled,
-                    pressed && canMoveSelectionEndEarlier && styles.rangeStepperButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rangeStepperButtonText,
-                      !canMoveSelectionEndEarlier && styles.rangeStepperButtonTextDisabled,
-                    ]}
-                  >
-                    종료 -10분
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canMoveSelectionEndLater}
-                  onPress={() => adjustConfirmedSelection('end', 1)}
-                  style={({ pressed }) => [
-                    styles.rangeStepperButton,
-                    !canMoveSelectionEndLater && styles.rangeStepperButtonDisabled,
-                    pressed && canMoveSelectionEndLater && styles.rangeStepperButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rangeStepperButtonText,
-                      !canMoveSelectionEndLater && styles.rangeStepperButtonTextDisabled,
-                    ]}
-                  >
-                    종료 +10분
-                  </Text>
-                </Pressable>
+            <ScrollView
+              contentContainerStyle={styles.categoryDrawerContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.categoryPaletteHeader}>
+                <View>
+                  <Text style={styles.categoryPaletteTitle}>카테고리</Text>
+                  {confirmedSelection ? (
+                    <Text style={styles.categoryPaletteRange}>
+                      {confirmedSelection.startTime}-{confirmedSelection.endTime}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
 
-              <View style={styles.timeInputRow}>
-                <View style={styles.timeInputGroup}>
-                  <Text style={styles.timeInputLabel}>시작</Text>
-                  <TextInput
-                    accessibilityLabel="시작 시간 직접 입력"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                    onChangeText={(nextStartTime) => updateTimeInput(nextStartTime, timeInputEnd)}
-                    placeholder="HH:mm"
-                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                    value={timeInputStart}
-                  />
-                </View>
-                <View style={styles.timeInputGroup}>
-                  <Text style={styles.timeInputLabel}>종료</Text>
-                  <TextInput
-                    accessibilityLabel="종료 시간 직접 입력"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                    onChangeText={(nextEndTime) => updateTimeInput(timeInputStart, nextEndTime)}
-                    placeholder="HH:mm"
-                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                    value={timeInputEnd}
-                  />
-                </View>
-              </View>
-              {timeInputError ? <Text style={styles.timeInputError}>{timeInputError}</Text> : null}
-            </View>
-            <View style={styles.categoryButtonList}>
-              {categoryPaletteItems.length === 0 ? (
-                <View style={styles.categoryEmptyState}>
-                  <Text style={styles.categoryEmptyTitle}>저장된 카테고리가 없습니다.</Text>
-                  <Text style={styles.categoryEmptyDescription}>
-                    예시:{' '}
-                    {EXAMPLE_CATEGORY_DEFINITIONS.slice(0, 4)
-                      .map((category) => `${category.emoji} ${category.name}`)
-                      .join(', ')}
-                  </Text>
-                </View>
-              ) : (
-                categoryPaletteItems.map((category) => (
+              <View style={styles.timeRangeEditor}>
+                <View style={styles.rangeStepperGrid}>
                   <Pressable
-                    key={category.id}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: !canApplySelectedRange }}
-                    disabled={!canApplySelectedRange}
-                    onPress={() => void applyCategoryToSelection(category.id)}
+                    disabled={!canMoveSelectionStartEarlier}
+                    onPress={() => adjustConfirmedSelection('start', -1)}
                     style={({ pressed }) => [
-                      styles.categoryButton,
-                      {
-                        backgroundColor: category.color,
-                        borderColor: category.color,
-                      },
-                      !canApplySelectedRange && styles.categoryButtonDisabled,
-                      pressed && canApplySelectedRange && styles.categoryButtonPressed,
+                      styles.rangeStepperButton,
+                      !canMoveSelectionStartEarlier && styles.rangeStepperButtonDisabled,
+                      pressed && canMoveSelectionStartEarlier && styles.rangeStepperButtonPressed,
                     ]}
                   >
-                    <Text style={styles.categoryButtonText}>
-                      {category.emoji} {category.name}
+                    <Text
+                      style={[
+                        styles.rangeStepperButtonText,
+                        !canMoveSelectionStartEarlier && styles.rangeStepperButtonTextDisabled,
+                      ]}
+                    >
+                      시작 -10분
                     </Text>
                   </Pressable>
-                ))
-              )}
-            </View>
-            {entrySaveState === 'saving' ? (
-              <Text style={styles.categorySaveStatus}>기록을 저장하고 있습니다.</Text>
-            ) : null}
-            {entrySaveErrorMessage ? (
-              <Text style={styles.categorySaveError}>{entrySaveErrorMessage}</Text>
-            ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!canMoveSelectionStartLater}
+                    onPress={() => adjustConfirmedSelection('start', 1)}
+                    style={({ pressed }) => [
+                      styles.rangeStepperButton,
+                      !canMoveSelectionStartLater && styles.rangeStepperButtonDisabled,
+                      pressed && canMoveSelectionStartLater && styles.rangeStepperButtonPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeStepperButtonText,
+                        !canMoveSelectionStartLater && styles.rangeStepperButtonTextDisabled,
+                      ]}
+                    >
+                      시작 +10분
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!canMoveSelectionEndEarlier}
+                    onPress={() => adjustConfirmedSelection('end', -1)}
+                    style={({ pressed }) => [
+                      styles.rangeStepperButton,
+                      !canMoveSelectionEndEarlier && styles.rangeStepperButtonDisabled,
+                      pressed && canMoveSelectionEndEarlier && styles.rangeStepperButtonPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeStepperButtonText,
+                        !canMoveSelectionEndEarlier && styles.rangeStepperButtonTextDisabled,
+                      ]}
+                    >
+                      종료 -10분
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!canMoveSelectionEndLater}
+                    onPress={() => adjustConfirmedSelection('end', 1)}
+                    style={({ pressed }) => [
+                      styles.rangeStepperButton,
+                      !canMoveSelectionEndLater && styles.rangeStepperButtonDisabled,
+                      pressed && canMoveSelectionEndLater && styles.rangeStepperButtonPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeStepperButtonText,
+                        !canMoveSelectionEndLater && styles.rangeStepperButtonTextDisabled,
+                      ]}
+                    >
+                      종료 +10분
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.timeInputRow}>
+                  <View style={styles.timeInputGroup}>
+                    <Text style={styles.timeInputLabel}>시작</Text>
+                    <TextInput
+                      accessibilityLabel="시작 시간 직접 입력"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      onChangeText={(nextStartTime) => updateTimeInput(nextStartTime, timeInputEnd)}
+                      placeholder="HH:mm"
+                      style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
+                      value={timeInputStart}
+                    />
+                  </View>
+                  <View style={styles.timeInputGroup}>
+                    <Text style={styles.timeInputLabel}>종료</Text>
+                    <TextInput
+                      accessibilityLabel="종료 시간 직접 입력"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      onChangeText={(nextEndTime) => updateTimeInput(timeInputStart, nextEndTime)}
+                      placeholder="HH:mm"
+                      style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
+                      value={timeInputEnd}
+                    />
+                  </View>
+                </View>
+                {timeInputError ? (
+                  <Text style={styles.timeInputError}>{timeInputError}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.categoryButtonList}>
+                {categoryPaletteItems.length === 0 ? (
+                  <View style={styles.categoryEmptyState}>
+                    <Text style={styles.categoryEmptyTitle}>저장된 카테고리가 없습니다.</Text>
+                    <Text style={styles.categoryEmptyDescription}>
+                      예시:{' '}
+                      {EXAMPLE_CATEGORY_DEFINITIONS.slice(0, 4)
+                        .map((category) => `${category.emoji} ${category.name}`)
+                        .join(', ')}
+                    </Text>
+                  </View>
+                ) : (
+                  categoryPaletteItems.map((category) => (
+                    <Pressable
+                      key={category.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !canApplySelectedRange }}
+                      disabled={!canApplySelectedRange}
+                      onPress={() => void applyCategoryToSelection(category.id)}
+                      style={({ pressed }) => [
+                        styles.categoryButton,
+                        {
+                          backgroundColor: category.color,
+                          borderColor: category.color,
+                        },
+                        !canApplySelectedRange && styles.categoryButtonDisabled,
+                        pressed && canApplySelectedRange && styles.categoryButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.categoryButtonText}>
+                        {category.emoji} {category.name}
+                      </Text>
+                    </Pressable>
+                  ))
+                )}
+              </View>
+              {entrySaveState === 'saving' ? (
+                <Text style={styles.categorySaveStatus}>기록을 저장하고 있습니다.</Text>
+              ) : null}
+              {entrySaveErrorMessage ? (
+                <Text style={styles.categorySaveError}>{entrySaveErrorMessage}</Text>
+              ) : null}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1159,181 +1170,186 @@ export default function TodayScreen() {
         <View style={styles.drawerOverlay}>
           <Pressable style={styles.drawerBackdrop} onPress={closeEntryEditor} />
           <View style={styles.categoryDrawer}>
-            <View style={styles.categoryPaletteHeader}>
-              <View>
-                <Text style={styles.categoryPaletteTitle}>기록 편집</Text>
-                <Text style={styles.categoryPaletteRange}>{formatMonthDay(selectedDate)}</Text>
+            <ScrollView
+              contentContainerStyle={styles.categoryDrawerContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.categoryPaletteHeader}>
+                <View>
+                  <Text style={styles.categoryPaletteTitle}>기록 편집</Text>
+                  <Text style={styles.categoryPaletteRange}>{formatMonthDay(selectedDate)}</Text>
+                </View>
               </View>
-            </View>
 
-            {editingEntryDraft ? (
-              <>
-                <View style={styles.timeInputRow}>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>시작</Text>
-                    <TextInput
-                      accessibilityLabel="편집 시작 시간"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(startTime) => updateEditingEntryDraft({ startTime })}
-                      placeholder="HH:mm"
-                      style={[
-                        styles.timeInput,
-                        editValidationErrorMessage && styles.timeInputInvalid,
-                      ]}
-                      value={editingEntryDraft.startTime}
-                    />
-                  </View>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>종료</Text>
-                    <TextInput
-                      accessibilityLabel="편집 종료 시간"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(endTime) => updateEditingEntryDraft({ endTime })}
-                      placeholder="HH:mm"
-                      style={[
-                        styles.timeInput,
-                        editValidationErrorMessage && styles.timeInputInvalid,
-                      ]}
-                      value={editingEntryDraft.endTime}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.editFieldGroup}>
-                  <Text style={styles.timeInputLabel}>카테고리</Text>
-                  <View style={styles.categoryButtonList}>
-                    {categoryPaletteItems.map((category) => {
-                      const isSelected = category.id === editingEntryDraft.categoryId;
-
-                      return (
-                        <Pressable
-                          key={category.id}
-                          accessibilityRole="button"
-                          onPress={() => updateEditingEntryDraft({ categoryId: category.id })}
-                          style={({ pressed }) => [
-                            styles.categoryButton,
-                            {
-                              backgroundColor: category.color,
-                              borderColor: category.color,
-                            },
-                            isSelected && styles.categoryButtonSelected,
-                            pressed && styles.categoryButtonPressed,
-                          ]}
-                        >
-                          <Text style={styles.categoryButtonText}>
-                            {category.emoji} {category.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={styles.editFieldGroup}>
-                  <Text style={styles.timeInputLabel}>메모</Text>
-                  <TextInput
-                    accessibilityLabel="기록 메모"
-                    multiline
-                    onChangeText={(note) => updateEditingEntryDraft({ note })}
-                    placeholder="메모"
-                    style={[styles.timeInput, styles.noteInput]}
-                    value={editingEntryDraft.note}
-                  />
-                </View>
-
-                {editValidationErrorMessage ? (
-                  <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
-                ) : null}
-                {editSaveErrorMessage ? (
-                  <Text style={styles.categorySaveError}>{editSaveErrorMessage}</Text>
-                ) : null}
-                {editSaveState === 'saving' ? (
-                  <Text style={styles.categorySaveStatus}>수정 내용을 저장하고 있습니다.</Text>
-                ) : null}
-                {editSaveState === 'deleting' ? (
-                  <Text style={styles.categorySaveStatus}>기록을 삭제하고 있습니다.</Text>
-                ) : null}
-
-                {isDeleteConfirmVisible ? (
-                  <View style={styles.deleteConfirmBox}>
-                    <Text style={styles.deleteConfirmTitle}>이 기록을 삭제할까요?</Text>
-                    <View style={styles.editActionRow}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setIsDeleteConfirmVisible(false)}
-                        style={({ pressed }) => [
-                          styles.secondaryActionButton,
-                          pressed && styles.secondaryActionButtonPressed,
+              {editingEntryDraft ? (
+                <>
+                  <View style={styles.timeInputRow}>
+                    <View style={styles.timeInputGroup}>
+                      <Text style={styles.timeInputLabel}>시작</Text>
+                      <TextInput
+                        accessibilityLabel="편집 시작 시간"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        onChangeText={(startTime) => updateEditingEntryDraft({ startTime })}
+                        placeholder="HH:mm"
+                        style={[
+                          styles.timeInput,
+                          editValidationErrorMessage && styles.timeInputInvalid,
                         ]}
-                      >
-                        <Text style={styles.secondaryActionButtonText}>취소</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ disabled: editSaveState === 'deleting' }}
-                        disabled={editSaveState === 'deleting'}
-                        onPress={() => void deleteEditedEntry()}
-                        style={({ pressed }) => [
-                          styles.deleteConfirmButton,
-                          editSaveState === 'deleting' && styles.deleteActionButtonDisabled,
-                          pressed &&
-                            editSaveState !== 'deleting' &&
-                            styles.deleteConfirmButtonPressed,
+                        value={editingEntryDraft.startTime}
+                      />
+                    </View>
+                    <View style={styles.timeInputGroup}>
+                      <Text style={styles.timeInputLabel}>종료</Text>
+                      <TextInput
+                        accessibilityLabel="편집 종료 시간"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        onChangeText={(endTime) => updateEditingEntryDraft({ endTime })}
+                        placeholder="HH:mm"
+                        style={[
+                          styles.timeInput,
+                          editValidationErrorMessage && styles.timeInputInvalid,
                         ]}
-                      >
-                        <Text style={styles.deleteConfirmButtonText}>삭제</Text>
-                      </Pressable>
+                        value={editingEntryDraft.endTime}
+                      />
                     </View>
                   </View>
-                ) : (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: !canDeleteEditedEntry }}
-                    disabled={!canDeleteEditedEntry}
-                    onPress={requestDeleteEditedEntry}
-                    style={({ pressed }) => [
-                      styles.deleteActionButton,
-                      !canDeleteEditedEntry && styles.deleteActionButtonDisabled,
-                      pressed && canDeleteEditedEntry && styles.deleteActionButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.deleteActionButtonText}>삭제</Text>
-                  </Pressable>
-                )}
 
-                <View style={styles.editActionRow}>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={closeEntryEditor}
-                    style={({ pressed }) => [
-                      styles.secondaryActionButton,
-                      pressed && styles.secondaryActionButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.secondaryActionButtonText}>취소</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: !canSaveEditedEntry }}
-                    disabled={!canSaveEditedEntry}
-                    onPress={() => void saveEditedEntry()}
-                    style={({ pressed }) => [
-                      styles.primaryActionButton,
-                      !canSaveEditedEntry && styles.primaryActionButtonDisabled,
-                      pressed && canSaveEditedEntry && styles.primaryActionButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.primaryActionButtonText}>저장</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : null}
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.timeInputLabel}>카테고리</Text>
+                    <View style={styles.categoryButtonList}>
+                      {categoryPaletteItems.map((category) => {
+                        const isSelected = category.id === editingEntryDraft.categoryId;
+
+                        return (
+                          <Pressable
+                            key={category.id}
+                            accessibilityRole="button"
+                            onPress={() => updateEditingEntryDraft({ categoryId: category.id })}
+                            style={({ pressed }) => [
+                              styles.categoryButton,
+                              {
+                                backgroundColor: category.color,
+                                borderColor: category.color,
+                              },
+                              isSelected && styles.categoryButtonSelected,
+                              pressed && styles.categoryButtonPressed,
+                            ]}
+                          >
+                            <Text style={styles.categoryButtonText}>
+                              {category.emoji} {category.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.timeInputLabel}>메모</Text>
+                    <TextInput
+                      accessibilityLabel="기록 메모"
+                      multiline
+                      onChangeText={(note) => updateEditingEntryDraft({ note })}
+                      placeholder="메모"
+                      style={[styles.timeInput, styles.noteInput]}
+                      value={editingEntryDraft.note}
+                    />
+                  </View>
+
+                  {editValidationErrorMessage ? (
+                    <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
+                  ) : null}
+                  {editSaveErrorMessage ? (
+                    <Text style={styles.categorySaveError}>{editSaveErrorMessage}</Text>
+                  ) : null}
+                  {editSaveState === 'saving' ? (
+                    <Text style={styles.categorySaveStatus}>수정 내용을 저장하고 있습니다.</Text>
+                  ) : null}
+                  {editSaveState === 'deleting' ? (
+                    <Text style={styles.categorySaveStatus}>기록을 삭제하고 있습니다.</Text>
+                  ) : null}
+
+                  {isDeleteConfirmVisible ? (
+                    <View style={styles.deleteConfirmBox}>
+                      <Text style={styles.deleteConfirmTitle}>이 기록을 삭제할까요?</Text>
+                      <View style={styles.editActionRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setIsDeleteConfirmVisible(false)}
+                          style={({ pressed }) => [
+                            styles.secondaryActionButton,
+                            pressed && styles.secondaryActionButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.secondaryActionButtonText}>취소</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled: editSaveState === 'deleting' }}
+                          disabled={editSaveState === 'deleting'}
+                          onPress={() => void deleteEditedEntry()}
+                          style={({ pressed }) => [
+                            styles.deleteConfirmButton,
+                            editSaveState === 'deleting' && styles.deleteActionButtonDisabled,
+                            pressed &&
+                              editSaveState !== 'deleting' &&
+                              styles.deleteConfirmButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.deleteConfirmButtonText}>삭제</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !canDeleteEditedEntry }}
+                      disabled={!canDeleteEditedEntry}
+                      onPress={requestDeleteEditedEntry}
+                      style={({ pressed }) => [
+                        styles.deleteActionButton,
+                        !canDeleteEditedEntry && styles.deleteActionButtonDisabled,
+                        pressed && canDeleteEditedEntry && styles.deleteActionButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.deleteActionButtonText}>삭제</Text>
+                    </Pressable>
+                  )}
+
+                  <View style={styles.editActionRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={closeEntryEditor}
+                      style={({ pressed }) => [
+                        styles.secondaryActionButton,
+                        pressed && styles.secondaryActionButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.secondaryActionButtonText}>취소</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !canSaveEditedEntry }}
+                      disabled={!canSaveEditedEntry}
+                      onPress={() => void saveEditedEntry()}
+                      style={({ pressed }) => [
+                        styles.primaryActionButton,
+                        !canSaveEditedEntry && styles.primaryActionButtonDisabled,
+                        pressed && canSaveEditedEntry && styles.primaryActionButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.primaryActionButtonText}>저장</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1454,6 +1470,26 @@ function createHourlyRows(
   }
 
   return rows;
+}
+
+function renderDayStateBanner(state: DayEntriesLoadState) {
+  if (state === 'loading' || state === 'idle') {
+    return <Text style={styles.dayStateBanner}>기록을 불러오고 있습니다.</Text>;
+  }
+
+  if (state === 'unconfigured') {
+    return <Text style={styles.dayStateBanner}>서버 연결 전이라 기록 저장을 대기합니다.</Text>;
+  }
+
+  if (state === 'error') {
+    return (
+      <Text style={[styles.dayStateBanner, styles.dayStateBannerError]}>
+        네트워크 또는 서버 오류로 기록을 불러오지 못했습니다.
+      </Text>
+    );
+  }
+
+  return null;
 }
 
 function renderEntryListContent(
@@ -1606,6 +1642,7 @@ const styles = StyleSheet.create({
   },
   summaryMetricValue: {
     color: theme.color.text,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
   },
@@ -1617,6 +1654,21 @@ const styles = StyleSheet.create({
     color: theme.color.text,
     fontSize: theme.typography.body,
     fontWeight: '800',
+  },
+  dayStateBanner: {
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  dayStateBannerError: {
+    borderColor: theme.color.danger,
+    color: theme.color.danger,
   },
   dayGrid: {
     borderWidth: 1,
@@ -1635,10 +1687,10 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     width: 44,
-    minHeight: 24,
+    minHeight: 30,
     color: theme.color.textMuted,
     fontSize: 11,
-    lineHeight: 24,
+    lineHeight: 30,
   },
   blockMatrix: {
     flex: 1,
@@ -1650,11 +1702,11 @@ const styles = StyleSheet.create({
   },
   blockContainer: {
     flex: 1,
-    minHeight: 24,
+    minHeight: 30,
   },
   emptyBlock: {
     flex: 1,
-    minHeight: 24,
+    minHeight: 30,
     borderWidth: 1,
     borderColor: 'transparent',
     borderRadius: 2,
@@ -1724,6 +1776,7 @@ const styles = StyleSheet.create({
   },
   entryTime: {
     color: theme.color.text,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
   },
@@ -1752,10 +1805,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(23, 33, 27, 0.18)',
   },
   categoryDrawer: {
-    gap: theme.spacing.md,
     borderTopLeftRadius: theme.radius.md,
     borderTopRightRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
+    maxHeight: '92%',
+  },
+  categoryDrawerContent: {
+    gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
@@ -1787,7 +1843,7 @@ const styles = StyleSheet.create({
   rangeStepperButton: {
     flexBasis: '48%',
     flexGrow: 1,
-    minHeight: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1805,8 +1861,10 @@ const styles = StyleSheet.create({
   },
   rangeStepperButtonText: {
     color: theme.color.text,
+    flexShrink: 1,
     fontSize: theme.typography.caption,
     fontWeight: '800',
+    textAlign: 'center',
   },
   rangeStepperButtonTextDisabled: {
     color: theme.color.textMuted,
@@ -1868,7 +1926,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   categoryButton: {
-    minHeight: 44,
+    minHeight: 48,
+    minWidth: 96,
     justifyContent: 'center',
     borderWidth: 1,
     borderRadius: theme.radius.md,
@@ -1885,8 +1944,10 @@ const styles = StyleSheet.create({
   },
   categoryButtonText: {
     color: theme.color.surface,
+    flexShrink: 1,
     fontSize: theme.typography.caption,
     fontWeight: '800',
+    textAlign: 'center',
   },
   editFieldGroup: {
     gap: theme.spacing.sm,
@@ -1918,8 +1979,10 @@ const styles = StyleSheet.create({
   },
   deleteActionButtonText: {
     color: theme.color.danger,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
+    textAlign: 'center',
   },
   deleteConfirmBox: {
     gap: theme.spacing.md,
@@ -1931,6 +1994,7 @@ const styles = StyleSheet.create({
   },
   deleteConfirmTitle: {
     color: theme.color.text,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
   },
@@ -1948,8 +2012,10 @@ const styles = StyleSheet.create({
   },
   deleteConfirmButtonText: {
     color: theme.color.surface,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
+    textAlign: 'center',
   },
   primaryActionButton: {
     flex: 1,
@@ -1968,8 +2034,10 @@ const styles = StyleSheet.create({
   },
   primaryActionButtonText: {
     color: theme.color.surface,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
+    textAlign: 'center',
   },
   secondaryActionButton: {
     flex: 1,
@@ -1987,8 +2055,10 @@ const styles = StyleSheet.create({
   },
   secondaryActionButtonText: {
     color: theme.color.text,
+    flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
+    textAlign: 'center',
   },
   categorySaveStatus: {
     color: theme.color.textMuted,
