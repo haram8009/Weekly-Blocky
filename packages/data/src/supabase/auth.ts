@@ -1,8 +1,8 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 import { SupabaseStorageError } from './errors';
 
-export async function requireCurrentUserId(client: SupabaseClient): Promise<string> {
+export async function requireCurrentUser(client: SupabaseClient): Promise<User> {
   const { data, error } = await client.auth.getUser();
 
   if (error) {
@@ -22,5 +22,9 @@ export async function requireCurrentUserId(client: SupabaseClient): Promise<stri
     );
   }
 
-  return data.user.id;
+  return data.user;
+}
+
+export async function requireCurrentUserId(client: SupabaseClient): Promise<string> {
+  return (await requireCurrentUser(client)).id;
 }

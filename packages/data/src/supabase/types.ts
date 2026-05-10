@@ -1,10 +1,19 @@
 import type {
+  AppSettings,
   DateString,
   EntityId,
   TimeEntrySource,
   TimeString,
   TimestampString,
 } from '@weekly/domain';
+
+export type SupabaseUserProfileRow = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type SupabaseCategoryRow = {
   id: string;
@@ -45,6 +54,20 @@ export type SupabaseWeekReviewRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+};
+
+export type SupabaseSettingsRow = {
+  id: string;
+  user_id: string;
+  week_starts_on: AppSettings['weekStartsOn'];
+  visible_start_time: string;
+  visible_end_time: string;
+  use_full_day_view: boolean;
+  photo_matching_enabled: boolean;
+  thumbnail_sync_enabled: boolean;
+  last_opened_week_start_date: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ListCategoriesOptions = {

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 
+import { ensureMobileUserBootstrapData } from '@/lib/supabase/bootstrap';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 
@@ -29,6 +30,28 @@ export function MobileAuthProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status !== 'authenticated') {
+      return;
+    }
+
+    let isActive = true;
+
+    ensureMobileUserBootstrapData().catch((error) => {
+      if (!isActive) {
+        return;
+      }
+
+      setErrorMessage(
+        error instanceof Error ? error.message : '사용자 기본 데이터를 준비하지 못했습니다.',
+      );
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [status, session?.user.id]);
 
   useEffect(() => {
     const envStatus = getMobileSupabaseEnvStatus();

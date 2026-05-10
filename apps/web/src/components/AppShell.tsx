@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
 import { signOut } from '@/lib/supabase/auth';
+import { ensureWebUserBootstrapData } from '@/lib/supabase/bootstrap';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import styles from './AppShell.module.css';
 
@@ -29,7 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     client.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!isActive) {
           return;
         }
@@ -39,6 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           return;
         }
 
+        await ensureWebUserBootstrapData();
         setEmail(data.session.user.email ?? null);
         setIsCheckingSession(false);
       })
@@ -56,8 +58,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
 
-      setEmail(session.user.email ?? null);
-      setIsCheckingSession(false);
+      ensureWebUserBootstrapData()
+        .then(() => {
+          setEmail(session.user.email ?? null);
+          setIsCheckingSession(false);
+        })
+        .catch(() => {
+          setEmail(session.user.email ?? null);
+          setIsCheckingSession(false);
+        });
     });
 
     return () => {

@@ -1,22 +1,37 @@
-import type { Category, DateString, TimeEntry, WeekReview } from '@weekly/domain';
-import { getDatesOfWeek } from '@weekly/domain';
+import type {
+  AppSettings,
+  Category,
+  DateString,
+  TimeEntry,
+  UserProfile,
+  WeekReview,
+} from '@weekly/domain';
+import { createDefaultAppSettings, getDatesOfWeek } from '@weekly/domain';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { requireCurrentUserId } from './auth';
+import { requireCurrentUser, requireCurrentUserId } from './auth';
 import {
   createSupabaseMutationError,
   createSupabaseQueryError,
   SupabaseStorageError,
 } from './errors';
 import { createEntityId, createWeekReviewId } from './ids';
-import { mapCategoryRow, mapTimeEntryRow, mapWeekReviewRow } from './mappers';
+import {
+  mapCategoryRow,
+  mapSettingsRow,
+  mapTimeEntryRow,
+  mapUserProfileRow,
+  mapWeekReviewRow,
+} from './mappers';
 import type {
   ArchiveCategoryRepositoryInput,
   CreateCategoryRepositoryInput,
   CreateTimeEntryRepositoryInput,
   ListCategoriesOptions,
   SupabaseCategoryRow,
+  SupabaseSettingsRow,
   SupabaseTimeEntryRow,
+  SupabaseUserProfileRow,
   SupabaseWeekReviewRow,
   UpdateCategoryRepositoryInput,
   UpdateTimeEntryRepositoryInput,
@@ -26,6 +41,36 @@ import type {
 const READ_ERROR_MESSAGE = '서버 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
 const WRITE_ERROR_MESSAGE =
   '서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
+
+export class SupabaseUserProfileRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async upsertCurrentUserProfile(now = new Date().toISOString()): Promise<UserProfile> {
+    const user = await requireCurrentUser(this.client);
+    const email = user.email ?? '';
+    const displayName =
+      typeof user.user_metadata?.display_name === 'string' ? user.user_metadata.display_name : null;
+    const { data, error } = await this.client
+      .from('user_profiles')
+      .upsert(
+        {
+          id: user.id,
+          email,
+          display_name: displayName,
+          updated_at: now,
+        },
+        { onConflict: 'id' },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    return mapUserProfileRow(data as SupabaseUserProfileRow);
+  }
+}
 
 export class SupabaseCategoryRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -365,11 +410,70 @@ export class SupabaseWeekReviewRepository {
   }
 }
 
+export class SupabaseSettingsRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async getSettings(): Promise<AppSettings | null> {
+    const userId = await requireCurrentUserId(this.client);
+    const { data, error } = await this.client
+      .from('settings')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      throw createSupabaseQueryError(READ_ERROR_MESSAGE, error);
+    }
+
+    return data ? mapSettingsRow(data as SupabaseSettingsRow) : null;
+  }
+
+  async ensureDefaultSettings(now = new Date().toISOString()): Promise<AppSettings> {
+    const userId = await requireCurrentUserId(this.client);
+    const existingSettings = await this.getSettings();
+
+    if (existingSettings) {
+      return existingSettings;
+    }
+
+    const defaultSettings = createDefaultAppSettings({ userId, now });
+    const { data, error } = await this.client
+      .from('settings')
+      .insert(toSettingsInsertPayload(defaultSettings))
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      if (isUniqueViolation(error)) {
+        const concurrentSettings = await this.getSettings();
+
+        if (concurrentSettings) {
+          return concurrentSettings;
+        }
+      }
+
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    if (!data) {
+      throw new SupabaseStorageError(
+        'QUERY_FAILED',
+        READ_ERROR_MESSAGE,
+        'Settings insert returned no row.',
+      );
+    }
+
+    return mapSettingsRow(data as SupabaseSettingsRow);
+  }
+}
+
 export function createSupabaseRepositories(client: SupabaseClient) {
   return {
+    userProfiles: new SupabaseUserProfileRepository(client),
     categories: new SupabaseCategoryRepository(client),
     timeEntries: new SupabaseTimeEntryRepository(client),
     weekReviews: new SupabaseWeekReviewRepository(client),
+    settings: new SupabaseSettingsRepository(client),
   };
 }
 
@@ -423,6 +527,24 @@ export function upsertWeekReview(
   return new SupabaseWeekReviewRepository(client).upsertWeekReview(input);
 }
 
+export async function ensureCurrentUserBootstrapData(
+  client: SupabaseClient,
+): Promise<{ profile: UserProfile; settings: AppSettings }> {
+  const now = new Date().toISOString();
+  const profile = await new SupabaseUserProfileRepository(client).upsertCurrentUserProfile(now);
+  const settings = await new SupabaseSettingsRepository(client).ensureDefaultSettings(now);
+
+  return { profile, settings };
+}
+
+export function getSettings(client: SupabaseClient): Promise<AppSettings | null> {
+  return new SupabaseSettingsRepository(client).getSettings();
+}
+
+export function ensureDefaultSettings(client: SupabaseClient): Promise<AppSettings> {
+  return new SupabaseSettingsRepository(client).ensureDefaultSettings();
+}
+
 function toCategoryInsertPayload(
   input: CreateCategoryRepositoryInput,
   userId: string,
@@ -440,6 +562,22 @@ function toCategoryInsertPayload(
     created_at: now,
     updated_at: now,
     deleted_at: null,
+  };
+}
+
+function toSettingsInsertPayload(settings: AppSettings) {
+  return {
+    id: settings.id,
+    user_id: settings.userId,
+    week_starts_on: settings.weekStartsOn,
+    visible_start_time: settings.visibleStartTime,
+    visible_end_time: settings.visibleEndTime,
+    use_full_day_view: settings.useFullDayView,
+    photo_matching_enabled: settings.photoMatchingEnabled,
+    thumbnail_sync_enabled: settings.thumbnailSyncEnabled,
+    last_opened_week_start_date: settings.lastOpenedWeekStartDate,
+    created_at: settings.createdAt,
+    updated_at: settings.updatedAt,
   };
 }
 
@@ -465,6 +603,10 @@ function toCategoryUpdatePayload(
       : {}),
     updated_at: updatedAt,
   };
+}
+
+function isUniqueViolation(error: { code?: string }): boolean {
+  return error.code === '23505';
 }
 
 function normalizeRequiredCategoryText(value: string, fieldName: string): string {

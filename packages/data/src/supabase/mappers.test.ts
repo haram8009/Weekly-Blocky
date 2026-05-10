@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { mapCategoryRow, mapTimeEntryRow, mapWeekReviewRow } from './mappers';
+import {
+  mapCategoryRow,
+  mapSettingsRow,
+  mapTimeEntryRow,
+  mapUserProfileRow,
+  mapWeekReviewRow,
+} from './mappers';
 
 describe('Supabase row mappers', () => {
+  it('maps user profile rows to domain user profiles', () => {
+    expect(
+      mapUserProfileRow({
+        id: 'user-1',
+        email: 'user@example.com',
+        display_name: '사용자',
+        created_at: '2026-05-07T00:00:00.000Z',
+        updated_at: '2026-05-07T00:00:00.000Z',
+      }),
+    ).toEqual({
+      id: 'user-1',
+      email: 'user@example.com',
+      displayName: '사용자',
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+    });
+  });
+
   it('maps category rows to domain categories', () => {
     expect(
       mapCategoryRow({
@@ -88,6 +112,36 @@ describe('Supabase row mappers', () => {
       createdAt: '2026-05-07T00:00:00.000Z',
       updatedAt: '2026-05-07T00:00:00.000Z',
       deletedAt: null,
+    });
+  });
+
+  it('maps settings rows to domain app settings', () => {
+    expect(
+      mapSettingsRow({
+        id: 'settings:user-1',
+        user_id: 'user-1',
+        week_starts_on: 'monday',
+        visible_start_time: '05:00',
+        visible_end_time: '24:00',
+        use_full_day_view: false,
+        photo_matching_enabled: false,
+        thumbnail_sync_enabled: false,
+        last_opened_week_start_date: null,
+        created_at: '2026-05-07T00:00:00.000Z',
+        updated_at: '2026-05-07T00:00:00.000Z',
+      }),
+    ).toEqual({
+      id: 'settings:user-1',
+      userId: 'user-1',
+      weekStartsOn: 'monday',
+      visibleStartTime: '05:00',
+      visibleEndTime: '24:00',
+      useFullDayView: false,
+      photoMatchingEnabled: false,
+      thumbnailSyncEnabled: false,
+      lastOpenedWeekStartDate: null,
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
     });
   });
 });

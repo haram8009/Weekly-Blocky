@@ -1,6 +1,22 @@
-import type { Category, TimeEntry, WeekReview } from '@weekly/domain';
+import type { AppSettings, Category, TimeEntry, UserProfile, WeekReview } from '@weekly/domain';
 
-import type { SupabaseCategoryRow, SupabaseTimeEntryRow, SupabaseWeekReviewRow } from './types';
+import type {
+  SupabaseCategoryRow,
+  SupabaseSettingsRow,
+  SupabaseTimeEntryRow,
+  SupabaseUserProfileRow,
+  SupabaseWeekReviewRow,
+} from './types';
+
+export function mapUserProfileRow(row: SupabaseUserProfileRow): UserProfile {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export function mapCategoryRow(row: SupabaseCategoryRow): Category {
   return {
@@ -46,5 +62,21 @@ export function mapWeekReviewRow(row: SupabaseWeekReviewRow): WeekReview {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+  };
+}
+
+export function mapSettingsRow(row: SupabaseSettingsRow): AppSettings {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    weekStartsOn: row.week_starts_on,
+    visibleStartTime: row.visible_start_time,
+    visibleEndTime: row.visible_end_time,
+    useFullDayView: row.use_full_day_view,
+    photoMatchingEnabled: row.photo_matching_enabled,
+    thumbnailSyncEnabled: row.thumbnail_sync_enabled,
+    lastOpenedWeekStartDate: row.last_opened_week_start_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
