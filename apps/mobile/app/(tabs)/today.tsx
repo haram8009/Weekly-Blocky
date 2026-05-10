@@ -32,6 +32,7 @@ import {
   View,
   useWindowDimensions,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type PanResponderGestureState,
@@ -113,6 +114,9 @@ export default function TodayScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const blockMatrixRef = useRef<View>(null);
   const blockGridBoundsRef = useRef<WeekGridSlotBounds | null>(null);
+  const blockGridLayoutRef = useRef<{ width: number; height: number } | null>(null);
+  const tappedSlotIndexRef = useRef<number | null>(null);
+  const hasTouchMovedRef = useRef(false);
   const selectionDraftRef = useRef<SelectionDraft | null>(null);
   const selectionStartPointRef = useRef<WeekGridSlotPoint | null>(null);
   const latestTouchPointRef = useRef<WeekGridSlotPoint | null>(null);
@@ -490,15 +494,18 @@ export default function TodayScreen() {
     setSelectedDate(nextDate);
   }
 
-  function handleBlockGridLayout() {
+  function handleBlockGridLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    blockGridLayoutRef.current = { width, height };
     measureBlockGridBounds();
   }
 
   function handleBlockGridTouchStart(event: GestureResponderEvent) {
-    const point = getPagePointFromGesture(event);
+    const point = getBlockGridPointFromGesture(event);
 
     clearLongPressTimer();
     stopAutoScroll();
+    hasTouchMovedRef.current = false;
     isTouchActiveRef.current = true;
     selectionStartPointRef.current = point;
     latestTouchPointRef.current = point;
@@ -509,14 +516,18 @@ export default function TodayScreen() {
   }
 
   function handleBlockGridTouchMove(event: GestureResponderEvent) {
-    handleSelectionMoveToPoint(getPagePointFromGesture(event));
+    hasTouchMovedRef.current = true;
+    tappedSlotIndexRef.current = null;
+    handleSelectionMoveToPoint(getBlockGridPointFromGesture(event));
   }
 
   function handleSelectionMove(
     event: GestureResponderEvent,
     gestureState: PanResponderGestureState,
   ) {
-    handleSelectionMoveToPoint(getPagePointFromGesture(event, gestureState));
+    hasTouchMovedRef.current = true;
+    tappedSlotIndexRef.current = null;
+    handleSelectionMoveToPoint(getBlockGridPointFromGesture(event, gestureState));
   }
 
   function handleSelectionMoveToPoint(point: WeekGridSlotPoint) {
@@ -537,14 +548,14 @@ export default function TodayScreen() {
   }
 
   function handleBlockGridTouchEnd(event: GestureResponderEvent) {
-    finishSelectionAtPoint(getPagePointFromGesture(event));
+    finishSelectionAtPoint(getBlockGridPointFromGesture(event));
   }
 
   function handleSelectionRelease(
     event: GestureResponderEvent,
     gestureState: PanResponderGestureState,
   ) {
-    finishSelectionAtPoint(getPagePointFromGesture(event, gestureState));
+    finishSelectionAtPoint(getBlockGridPointFromGesture(event, gestureState));
   }
 
   function finishSelectionAtPoint(releasePoint: WeekGridSlotPoint) {
@@ -552,7 +563,7 @@ export default function TodayScreen() {
     isTouchActiveRef.current = false;
 
     if (!isSelectionGestureActiveRef.current) {
-      finishTapSelectionAtPoint(releasePoint);
+      finishTapSelection();
       return;
     }
 
@@ -646,35 +657,19 @@ export default function TodayScreen() {
     setEntrySaveErrorMessage(null);
   }
 
-  function finishTapSelectionAtPoint(releasePoint: WeekGridSlotPoint) {
-    const startPoint = selectionStartPointRef.current;
+  function finishTapSelection() {
+    const tappedSlotIndex = tappedSlotIndexRef.current;
 
-    if (!startPoint || getPointDistance(startPoint, releasePoint) > LONG_PRESS_MOVE_TOLERANCE) {
+    if (tappedSlotIndex !== null && !hasTouchMovedRef.current) {
+      confirmSelectionAtSlotIndex(tappedSlotIndex);
       resetSelectionGesture();
       return;
     }
 
-    const bounds = blockGridBoundsRef.current;
-
-    if (bounds) {
-      confirmSelectionAtPoint(releasePoint, bounds);
-      resetSelectionGesture();
-      return;
-    }
-
-    measureBlockGridBounds((measuredBounds) => {
-      confirmSelectionAtPoint(releasePoint, measuredBounds);
-      resetSelectionGesture();
-    });
+    resetSelectionGesture();
   }
 
-  function confirmSelectionAtPoint(point: WeekGridSlotPoint, bounds: WeekGridSlotBounds) {
-    const slotIndex = getSlotIndexFromPoint(point, bounds);
-
-    if (slotIndex === null) {
-      return;
-    }
-
+  function confirmSelectionAtSlotIndex(slotIndex: number) {
     const block = blocks[slotIndex];
     const blockEntry = block ? getEntryCoveringBlock(block, dayEntries) : null;
 
@@ -900,10 +895,23 @@ export default function TodayScreen() {
 
   function measureBlockGridBounds(onMeasured?: (bounds: WeekGridSlotBounds) => void) {
     blockMatrixRef.current?.measureInWindow((pageX, pageY, width, height) => {
-      const bounds = { pageX, pageY, width, height };
+      const layout = blockGridLayoutRef.current;
+      const bounds = {
+        pageX,
+        pageY,
+        width: layout?.width ?? width,
+        height: layout?.height ?? height,
+      };
       blockGridBoundsRef.current = bounds;
       onMeasured?.(bounds);
     });
+  }
+
+  function getBlockGridPointFromGesture(
+    event: GestureResponderEvent,
+    gestureState?: PanResponderGestureState,
+  ): WeekGridSlotPoint {
+    return getPagePointFromGesture(event, gestureState);
   }
 
   function handleScreenScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -1049,6 +1057,8 @@ export default function TodayScreen() {
     stopAutoScroll();
     isSelectionGestureActiveRef.current = false;
     isTouchActiveRef.current = false;
+    tappedSlotIndexRef.current = null;
+    hasTouchMovedRef.current = false;
     selectionStartPointRef.current = null;
     latestTouchPointRef.current = null;
     setIsSelectionMode(false);
@@ -1197,7 +1207,13 @@ export default function TodayScreen() {
                       : [];
 
                   return (
-                    <View key={block.id} style={styles.blockContainer}>
+                    <View
+                      key={block.id}
+                      onTouchStart={() => {
+                        tappedSlotIndexRef.current = block.slotIndex;
+                      }}
+                      style={styles.blockContainer}
+                    >
                       <Animated.View
                         style={[
                           styles.emptyBlock,

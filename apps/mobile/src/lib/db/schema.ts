@@ -1,5 +1,5 @@
 export const LOCAL_DATABASE_NAME = 'weekly.db';
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 export const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 export const LOCAL_TABLE_NAMES = [
@@ -13,6 +13,29 @@ export const LOCAL_TABLE_NAMES = [
 ] as const;
 
 export type LocalTableName = (typeof LOCAL_TABLE_NAMES)[number];
+
+export const CREATE_PHOTO_REFERENCES_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS photoReferences (
+  id TEXT PRIMARY KEY NOT NULL,
+  userId TEXT NOT NULL,
+  entryId TEXT,
+  date TEXT NOT NULL,
+  capturedAt TEXT NOT NULL,
+  localAssetId TEXT NOT NULL,
+  localUri TEXT,
+  thumbnailLocalUri TEXT,
+  thumbnailRemoteUrl TEXT,
+  width INTEGER,
+  height INTEGER,
+  mediaType TEXT NOT NULL CHECK (mediaType IN ('photo', 'video')),
+  matchType TEXT NOT NULL CHECK (matchType IN ('auto', 'manual')),
+  isHidden INTEGER NOT NULL DEFAULT 0 CHECK (isHidden IN (0, 1)),
+  permissionScope TEXT NOT NULL CHECK (permissionScope IN ('all', 'limited')),
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  deletedAt TEXT
+);
+`;
 
 export const CREATE_INITIAL_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS localMetadata (
@@ -64,27 +87,7 @@ CREATE TABLE IF NOT EXISTS weekReviews (
   UNIQUE (userId, weekStartDate)
 );
 
-CREATE TABLE IF NOT EXISTS photoReferences (
-  id TEXT PRIMARY KEY NOT NULL,
-  userId TEXT NOT NULL,
-  entryId TEXT,
-  date TEXT NOT NULL,
-  capturedAt TEXT NOT NULL,
-  localAssetId TEXT NOT NULL,
-  localUri TEXT,
-  thumbnailLocalUri TEXT,
-  thumbnailRemoteUrl TEXT,
-  width INTEGER,
-  height INTEGER,
-  mediaType TEXT NOT NULL CHECK (mediaType IN ('photo', 'video')),
-  matchType TEXT NOT NULL CHECK (matchType IN ('auto', 'manual')),
-  isHidden INTEGER NOT NULL DEFAULT 0 CHECK (isHidden IN (0, 1)),
-  permissionScope TEXT NOT NULL CHECK (permissionScope IN ('all', 'limited')),
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL,
-  deletedAt TEXT,
-  FOREIGN KEY (entryId) REFERENCES timeEntries(id)
-);
+${CREATE_PHOTO_REFERENCES_TABLE_SQL}
 
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY NOT NULL,

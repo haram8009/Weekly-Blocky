@@ -4,6 +4,7 @@ import { configureLocalDatabase } from './client';
 import {
   CREATE_INITIAL_INDEXES_SQL,
   CREATE_INITIAL_SCHEMA_SQL,
+  CREATE_PHOTO_REFERENCES_TABLE_SQL,
   CURRENT_SCHEMA_VERSION,
   SCHEMA_VERSION_KEY,
 } from './schema';
@@ -32,6 +33,67 @@ const localMigrations: Migration[] = [
       await database.execAsync(CREATE_INITIAL_SCHEMA_SQL);
       await database.execAsync(CREATE_INITIAL_INDEXES_SQL);
       await setLocalSchemaVersion(database, 1);
+    },
+  },
+  {
+    fromVersion: 1,
+    toVersion: 2,
+    run: async (database) => {
+      await database.execAsync(`
+ALTER TABLE photoReferences RENAME TO photoReferences_v1;
+
+${CREATE_PHOTO_REFERENCES_TABLE_SQL}
+
+INSERT INTO photoReferences (
+  id,
+  userId,
+  entryId,
+  date,
+  capturedAt,
+  localAssetId,
+  localUri,
+  thumbnailLocalUri,
+  thumbnailRemoteUrl,
+  width,
+  height,
+  mediaType,
+  matchType,
+  isHidden,
+  permissionScope,
+  createdAt,
+  updatedAt,
+  deletedAt
+)
+SELECT
+  id,
+  userId,
+  entryId,
+  date,
+  capturedAt,
+  localAssetId,
+  localUri,
+  thumbnailLocalUri,
+  thumbnailRemoteUrl,
+  width,
+  height,
+  mediaType,
+  matchType,
+  isHidden,
+  permissionScope,
+  createdAt,
+  updatedAt,
+  deletedAt
+FROM photoReferences_v1;
+
+DROP TABLE photoReferences_v1;
+
+CREATE INDEX IF NOT EXISTS idx_photo_references_user_date
+  ON photoReferences (userId, date);
+
+CREATE INDEX IF NOT EXISTS idx_photo_references_entry
+  ON photoReferences (entryId);
+`);
+      await setLocalSchemaVersion(database, 2);
     },
   },
 ];

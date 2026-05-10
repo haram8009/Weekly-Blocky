@@ -37,7 +37,7 @@ export async function listDatePhotoAssets(date: DateString): Promise<DatePhotoLo
       createdBefore,
       first: DATE_PHOTO_PAGE_SIZE,
       mediaType: MediaLibrary.MediaType.photo,
-      sortBy: [MediaLibrary.SortBy.creationTime, true],
+      sortBy: [[MediaLibrary.SortBy.creationTime, true]],
     });
 
     for (const asset of page.assets) {
