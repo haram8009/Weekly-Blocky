@@ -463,12 +463,12 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 ### 5. 서버 데이터 공유
 
-- [ ] 모바일과 웹이 같은 categories 조회
-- [ ] 모바일과 웹이 같은 timeEntries 조회
-- [ ] 모바일과 웹이 같은 weekReviews 조회
-- [ ] 모바일과 웹이 같은 settings 조회
-- [ ] `updatedAt` 서버 갱신 확인
-- [ ] soft delete 데이터는 기본 조회에서 제외
+- [x] 모바일과 웹이 같은 categories 조회
+- [x] 모바일과 웹이 같은 timeEntries 조회
+- [x] 모바일과 웹이 같은 weekReviews 조회
+- [x] 모바일과 웹이 같은 settings 조회
+- [x] `updatedAt` 서버 갱신 확인
+- [x] soft delete 데이터는 기본 조회에서 제외
 - [ ] 사용자 생성 카테고리 중복 생성 방지
 
 ### 6. 데스크톱 웹 주간 열람
