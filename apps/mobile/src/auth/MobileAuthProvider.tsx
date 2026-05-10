@@ -7,7 +7,9 @@ import {
   type PropsWithChildren,
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
+import { createMobileAuthRedirectUrl, parseSupabaseAuthRedirectUrl } from '@/auth/authRedirect';
 import { ensureMobileUserBootstrapData } from '@/lib/supabase/bootstrap';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
@@ -108,6 +110,92 @@ export function MobileAuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+
+    if (!envStatus.isConfigured) {
+      return;
+    }
+
+    let isActive = true;
+    const client = getSupabaseClient();
+
+    async function handleAuthRedirectUrl(url: string) {
+      const authParams = parseSupabaseAuthRedirectUrl(url);
+
+      if (!authParams || !isActive) {
+        return;
+      }
+
+      if (authParams.errorDescription) {
+        setErrorMessage(authParams.errorDescription);
+        setStatus('anonymous');
+        setSession(null);
+        return;
+      }
+
+      try {
+        if (authParams.code) {
+          const { data, error } = await client.auth.exchangeCodeForSession(authParams.code);
+
+          if (error) {
+            throw error;
+          }
+
+          if (isActive) {
+            setSession(data.session);
+            setStatus(data.session ? 'authenticated' : 'anonymous');
+            setErrorMessage(null);
+          }
+
+          return;
+        }
+
+        if (authParams.accessToken && authParams.refreshToken) {
+          const { data, error } = await client.auth.setSession({
+            access_token: authParams.accessToken,
+            refresh_token: authParams.refreshToken,
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          if (isActive) {
+            setSession(data.session);
+            setStatus(data.session ? 'authenticated' : 'anonymous');
+            setErrorMessage(null);
+          }
+        }
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error ? error.message : '이메일 확인 링크 처리에 실패했습니다.',
+        );
+        setStatus('anonymous');
+        setSession(null);
+      }
+    }
+
+    void Linking.getInitialURL().then((url) => {
+      if (url) {
+        void handleAuthRedirectUrl(url);
+      }
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      void handleAuthRedirectUrl(url);
+    });
+
+    return () => {
+      isActive = false;
+      subscription.remove();
+    };
+  }, []);
+
   const value = useMemo<MobileAuthContextValue>(
     () => ({
       status,
@@ -128,6 +216,9 @@ export function MobileAuthProvider({ children }: PropsWithChildren) {
         const { error } = await getSupabaseClient().auth.signUp({
           email: email.trim(),
           password,
+          options: {
+            emailRedirectTo: createMobileAuthRedirectUrl(),
+          },
         });
 
         if (error) {

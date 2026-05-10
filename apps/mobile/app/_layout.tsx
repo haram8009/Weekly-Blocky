@@ -64,7 +64,7 @@ function AuthRouteGuard({ children }: PropsWithChildren) {
       return;
     }
 
-    const isPublicRoute = !firstSegment || firstSegment === 'login';
+    const isPublicRoute = !firstSegment || firstSegment === 'login' || firstSegment === 'auth';
 
     if (status === 'authenticated' && isPublicRoute) {
       router.replace('/today');
