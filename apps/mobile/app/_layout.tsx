@@ -39,6 +39,7 @@ export default function RootLayout() {
             >
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
+              <Stack.Screen name="categories" />
               <Stack.Screen
                 name="(tabs)"
                 options={{
@@ -71,7 +72,7 @@ function AuthRouteGuard({ children }: PropsWithChildren) {
       return;
     }
 
-    if (status !== 'authenticated' && firstSegment === '(tabs)') {
+    if (status !== 'authenticated' && !isPublicRoute) {
       router.replace('/login');
     }
   }, [firstSegment, router, status]);

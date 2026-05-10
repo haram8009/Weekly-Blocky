@@ -15,9 +15,10 @@ import {
   type WeekGridTimeRangeSelection,
 } from '@weekly/domain';
 import { getSupabaseStorageErrorMessage } from '@weekly/data';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -322,6 +323,30 @@ export default function TodayScreen() {
       isActive = false;
     };
   }, [selectedDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const envStatus = getMobileSupabaseEnvStatus();
+
+      if (!envStatus.isConfigured) {
+        return undefined;
+      }
+
+      let isActive = true;
+
+      void listMobileCategories({ includeArchived: true })
+        .then((nextCategories) => {
+          if (isActive) {
+            setCategories(nextCategories);
+          }
+        })
+        .catch(() => undefined);
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     const envStatus = getMobileSupabaseEnvStatus();
@@ -1038,8 +1063,21 @@ export default function TodayScreen() {
       scrollViewRef={scrollViewRef}
     >
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>{isTodaySelected ? '오늘' : '선택 날짜'}</Text>
-        <Text style={styles.title}>{formatMonthDay(selectedDate)} 기록</Text>
+        <View style={styles.headerTitleRow}>
+          <View style={styles.headerTitleCopy}>
+            <Text style={styles.eyebrow}>{isTodaySelected ? '오늘' : '선택 날짜'}</Text>
+            <Text style={styles.title}>{formatMonthDay(selectedDate)} 기록</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="카테고리 관리 열기"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => router.push('/categories')}
+            style={({ pressed }) => [styles.headerMenuButton, pressed && styles.dateButtonPressed]}
+          >
+            <Text style={styles.headerMenuButtonText}>...</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.dateNavigator}>
@@ -2073,6 +2111,32 @@ const styles = StyleSheet.create({
   header: {
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.lg,
+  },
+  headerTitleCopy: {
+    flex: 1,
+    gap: theme.spacing.sm,
+  },
+  headerMenuButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+  },
+  headerMenuButtonText: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+    lineHeight: 20,
   },
   eyebrow: {
     color: theme.color.primary,
