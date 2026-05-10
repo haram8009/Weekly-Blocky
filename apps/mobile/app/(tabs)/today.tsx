@@ -1,13 +1,20 @@
 import {
+  addDaysToDate,
   buildWeekGrid,
   createWeekGridTimeRangeSelection,
+  DEFAULT_WEEK_GRID_START_TIME,
+  DEFAULT_WEEK_GRID_END_TIME,
   EXAMPLE_CATEGORY_DEFINITIONS,
   getWeekStartDate,
+  WEEK_GRID_SLOT_MINUTES,
+  type Category,
   type DateString,
+  type TimeEntry,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
 } from '@weekly/domain';
 import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -26,12 +33,22 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/Screen';
+import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
+import { listMobileCategories } from '@/lib/supabase/categories';
+import { listMobileTimeEntriesByDate } from '@/lib/supabase/timeEntries';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
   type WeekGridSlotBounds,
   type WeekGridSlotPoint,
 } from '@/todayGridSelection';
+import {
+  createDailyEntryListItems,
+  createDailySummary,
+  formatDuration,
+  resolveSelectedDate,
+  type DailyEntryListItem,
+} from '@/todayViewModel';
 
 const BLOCKS_PER_HOUR = 6;
 const BLOCK_ROW_GAP = theme.spacing.xs;
@@ -46,7 +63,11 @@ type SelectionDraft = {
   focusSlotIndex: number;
 };
 
+type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
+
 export default function TodayScreen() {
+  const searchParams = useLocalSearchParams();
+  const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
   const windowHeightRef = useRef(windowHeight);
   windowHeightRef.current = windowHeight;
@@ -64,17 +85,35 @@ export default function TodayScreen() {
   const scrollOffsetYRef = useRef(0);
   const selectionPulseValue = useRef(new Animated.Value(0)).current;
   const todayDate = getLocalDateString();
-  const todayGrid = useMemo(() => {
-    const weekGrid = buildWeekGrid({ weekStartDate: getWeekStartDate(todayDate, 'monday') });
-    return weekGrid.days.find((day) => day.date === todayDate) ?? weekGrid.days[0];
-  }, [todayDate]);
-  const blocks = todayGrid?.blocks ?? [];
+  const requestedDate = useMemo(
+    () => resolveSelectedDate(searchParams.date, todayDate),
+    [searchParams.date, todayDate],
+  );
+  const [selectedDate, setSelectedDate] = useState<DateString>(requestedDate);
+  const selectedDayGrid = useMemo(() => {
+    const weekGrid = buildWeekGrid({ weekStartDate: getWeekStartDate(selectedDate, 'monday') });
+    return weekGrid.days.find((day) => day.date === selectedDate) ?? weekGrid.days[0];
+  }, [selectedDate]);
+  const blocks = selectedDayGrid?.blocks ?? [];
   const hourlyRows = useMemo(() => createHourlyRows(blocks), [blocks]);
   const [selectionDraft, setSelectionDraft] = useState<SelectionDraft | null>(null);
   const [confirmedSelection, setConfirmedSelection] = useState<WeekGridTimeRangeSelection | null>(
     null,
   );
+  const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const isTodaySelected = selectedDate === todayDate;
+  const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
+  const dailyEntryItems = useMemo(
+    () => createDailyEntryListItems(dayEntries, categories),
+    [categories, dayEntries],
+  );
+  const dailySummary = useMemo(
+    () => createDailySummary(dayEntries, categories, visibleMinutes),
+    [categories, dayEntries, visibleMinutes],
+  );
   const draftSelection = useMemo(
     () => createSelectedRange(blocks, selectionDraft),
     [blocks, selectionDraft],
@@ -112,6 +151,58 @@ export default function TodayScreen() {
     [blocks],
   );
 
+  useEffect(() => {
+    setSelectedDate(requestedDate);
+  }, [requestedDate]);
+
+  useEffect(() => {
+    setConfirmedSelection(null);
+    selectionDraftRef.current = null;
+    setSelectionDraft(null);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+
+    if (!envStatus.isConfigured) {
+      setDayEntries([]);
+      setCategories([]);
+      setDayEntriesLoadState('unconfigured');
+      return;
+    }
+
+    let isActive = true;
+
+    setDayEntriesLoadState('loading');
+
+    void Promise.all([
+      listMobileTimeEntriesByDate(selectedDate),
+      listMobileCategories({ includeArchived: true }),
+    ])
+      .then(([nextEntries, nextCategories]) => {
+        if (!isActive) {
+          return;
+        }
+
+        setDayEntries(nextEntries);
+        setCategories(nextCategories);
+        setDayEntriesLoadState('ready');
+      })
+      .catch(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setDayEntries([]);
+        setCategories([]);
+        setDayEntriesLoadState('error');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDate]);
+
   useEffect(
     () => () => {
       clearLongPressTimer();
@@ -120,6 +211,20 @@ export default function TodayScreen() {
     },
     [selectionPulseValue],
   );
+
+  function moveSelectedDate(days: number) {
+    setSelectedDate((currentDate) => {
+      const nextDate = addDaysToDate(currentDate, days);
+      router.setParams({ date: nextDate });
+      return nextDate;
+    });
+  }
+
+  function moveToToday() {
+    const nextDate = getLocalDateString();
+    router.setParams({ date: nextDate });
+    setSelectedDate(nextDate);
+  }
 
   function handleBlockGridLayout() {
     measureBlockGridBounds();
@@ -437,12 +542,79 @@ export default function TodayScreen() {
       scrollViewRef={scrollViewRef}
     >
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>오늘</Text>
-        <Text style={styles.title}>{formatMonthDay(todayDate)} 기록</Text>
+        <Text style={styles.eyebrow}>{isTodaySelected ? '오늘' : '선택 날짜'}</Text>
+        <Text style={styles.title}>{formatMonthDay(selectedDate)} 기록</Text>
+      </View>
+
+      <View style={styles.dateNavigator}>
+        <Pressable
+          accessibilityLabel="이전 날로 이동"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => moveSelectedDate(-1)}
+          style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
+        >
+          <Text style={styles.dateButtonText}>{'<'}</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={isTodaySelected}
+          onPress={moveToToday}
+          style={({ pressed }) => [
+            styles.todayDateButton,
+            isTodaySelected && styles.todayDateButtonDisabled,
+            pressed && !isTodaySelected && styles.todayDateButtonPressed,
+          ]}
+        >
+          <Text
+            style={[
+              styles.todayDateButtonText,
+              isTodaySelected && styles.todayDateButtonTextDisabled,
+            ]}
+          >
+            오늘
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="다음 날로 이동"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => moveSelectedDate(1)}
+          style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
+        >
+          <Text style={styles.dateButtonText}>{'>'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.dailySummary}>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>완성률</Text>
+          <Text style={styles.summaryMetricValue}>{dailySummary.completionRate}%</Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>기록</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDuration(dailySummary.recordedMinutes)}
+          </Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>미기록</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDuration(dailySummary.unrecordedMinutes)}
+          </Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>최다</Text>
+          <Text style={styles.summaryMetricValue}>{dailySummary.topCategoryLabel ?? '없음'}</Text>
+        </View>
       </View>
 
       <View style={styles.gridHeader}>
-        <Text style={styles.gridTitle}>05:00-24:00</Text>
+        <Text style={styles.gridTitle}>
+          {DEFAULT_WEEK_GRID_START_TIME}-{DEFAULT_WEEK_GRID_END_TIME}
+        </Text>
       </View>
 
       <View style={styles.dayGrid}>
@@ -483,6 +655,15 @@ export default function TodayScreen() {
             ))}
           </View>
         </View>
+      </View>
+
+      <View style={styles.entryListSection}>
+        <View style={styles.entryListHeader}>
+          <Text style={styles.entryListTitle}>세션 목록</Text>
+          <Text style={styles.entryListCount}>{dailySummary.entryCount}개</Text>
+        </View>
+
+        {renderEntryListContent(dayEntriesLoadState, dailyEntryItems)}
       </View>
 
       <Modal
@@ -609,6 +790,46 @@ function createHourlyRows(
   return rows;
 }
 
+function renderEntryListContent(state: DayEntriesLoadState, items: readonly DailyEntryListItem[]) {
+  if (state === 'loading' || state === 'idle') {
+    return <Text style={styles.entryListStatus}>기록 목록을 불러오고 있습니다.</Text>;
+  }
+
+  if (state === 'unconfigured') {
+    return (
+      <Text style={styles.entryListStatus}>서버 연결 전이라 기록 목록을 표시하지 않습니다.</Text>
+    );
+  }
+
+  if (state === 'error') {
+    return <Text style={styles.entryListStatus}>기록 목록을 불러오지 못했습니다.</Text>;
+  }
+
+  if (items.length === 0) {
+    return <Text style={styles.entryListStatus}>이 날짜에는 아직 기록이 없습니다.</Text>;
+  }
+
+  return (
+    <View style={styles.entryCardList}>
+      {items.map((item) => (
+        <View key={item.id} style={styles.entryCard}>
+          <View style={[styles.entryColorBar, { backgroundColor: item.categoryColor }]} />
+          <View style={styles.entryCardBody}>
+            <View style={styles.entryCardHeader}>
+              <Text style={styles.entryTime}>{item.timeRangeLabel}</Text>
+              <Text style={styles.entryDuration}>{formatDuration(item.durationMinutes)}</Text>
+            </View>
+            <Text style={styles.entryCategory}>
+              {item.categoryEmoji} {item.categoryName}
+            </Text>
+            {item.note ? <Text style={styles.entryNote}>{item.note}</Text> : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function getLocalDateString(date = new Date()): DateString {
   return [
     date.getFullYear(),
@@ -638,6 +859,81 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.heading,
     fontWeight: '900',
   },
+  dateNavigator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  dateButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+  },
+  dateButtonPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  dateButtonText: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  todayDateButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.primary,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  todayDateButtonPressed: {
+    backgroundColor: theme.color.primaryPressed,
+  },
+  todayDateButtonDisabled: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  todayDateButtonText: {
+    color: theme.color.surface,
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+  },
+  todayDateButtonTextDisabled: {
+    color: theme.color.textMuted,
+  },
+  dailySummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  summaryMetric: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 72,
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    padding: theme.spacing.md,
+  },
+  summaryMetricLabel: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  summaryMetricValue: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
   gridHeader: {
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
@@ -652,6 +948,7 @@ const styles = StyleSheet.create({
     borderColor: theme.color.border,
     borderRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
+    marginBottom: theme.spacing.lg,
     padding: theme.spacing.sm,
   },
   gridBody: {
@@ -691,6 +988,82 @@ const styles = StyleSheet.create({
   selectedBlock: {
     backgroundColor: theme.color.accent,
     borderColor: theme.color.primary,
+  },
+  entryListSection: {
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  entryListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  entryListTitle: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  entryListCount: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  entryListStatus: {
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
+    padding: theme.spacing.lg,
+  },
+  entryCardList: {
+    gap: theme.spacing.sm,
+  },
+  entryCard: {
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+  },
+  entryColorBar: {
+    width: 6,
+  },
+  entryCardBody: {
+    flex: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  entryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  entryTime: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  entryDuration: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  entryCategory: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  entryNote: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 20,
   },
   drawerOverlay: {
     flex: 1,

@@ -1,4 +1,5 @@
 import { addDaysToDate, getDatesOfWeek, getWeekStartDate, type DateString } from '@weekly/domain';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -15,6 +16,7 @@ const WEEK_STEP_DAYS = 7;
 type WeekEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
 
 export default function WeekScreen() {
+  const router = useRouter();
   const todayDate = getLocalDateString();
   const todayWeekStartDate = getWeekStartDate(todayDate, 'monday');
   const hasUserChangedWeekRef = useRef(false);
@@ -160,16 +162,19 @@ export default function WeekScreen() {
           const hasRecordedEntries = recordedDates.has(date);
 
           return (
-            <View
+            <Pressable
               key={date}
               accessibilityLabel={`${formatMonthDay(date)} ${WEEKDAY_LABELS[index]}${
                 shouldShowRecordStatus ? (hasRecordedEntries ? ' 기록 있음' : ' 기록 없음') : ''
               }`}
-              style={[
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/today', params: { date } })}
+              style={({ pressed }) => [
                 styles.dayCell,
                 shouldShowRecordStatus && hasRecordedEntries && styles.recordedCell,
                 isToday && styles.todayCell,
                 shouldShowRecordStatus && hasRecordedEntries && isToday && styles.recordedTodayCell,
+                pressed && styles.dayCellPressed,
               ]}
             >
               <Text style={[styles.dayLabel, isToday && styles.todayLabel]}>
@@ -188,7 +193,7 @@ export default function WeekScreen() {
                   ]}
                 />
               )}
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -346,6 +351,9 @@ const styles = StyleSheet.create({
     borderColor: theme.color.border,
     borderRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
+  },
+  dayCellPressed: {
+    opacity: 0.78,
   },
   todayCell: {
     borderColor: theme.color.primary,
