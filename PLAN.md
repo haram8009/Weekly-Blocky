@@ -588,13 +588,13 @@ MVP 기본 진입에서는 주간 전체 시간 블록을 한 번에 보여주�
 
 ### 6. 선택적 썸네일 동기화
 
-- [ ] `thumbnailSyncEnabled` 설정 확인
-- [ ] 설정이 켜진 경우에만 작은 썸네일 업로드
-- [ ] Supabase Storage 업로드 경로 정의
-- [ ] `thumbnailRemoteUrl` 저장
+- [x] `thumbnailSyncEnabled` 설정 확인
+- [x] 설정이 켜진 경우에만 작은 썸네일 업로드
+- [x] Supabase Storage 업로드 경로 정의
+- [x] `thumbnailRemoteUrl` 저장
 - [ ] 웹에서는 동기화된 썸네일만 표시
 - [ ] 썸네일 동기화 실패 상태 처리
-- [ ] 원본 사진 업로드 방지 테스트 작성
+- [x] 원본 사진 업로드 방지 테스트 작성
 
 ### 산출물
 

@@ -2,6 +2,7 @@ import type {
   AppSettings,
   Category,
   DateString,
+  PhotoReference,
   TimeEntry,
   UserProfile,
   WeekReview,
@@ -18,6 +19,7 @@ import {
 import { createEntityId, createWeekReviewId } from './ids';
 import {
   mapCategoryRow,
+  mapPhotoReferenceRow,
   mapSettingsRow,
   mapTimeEntryRow,
   mapUserProfileRow,
@@ -29,6 +31,7 @@ import type {
   CreateTimeEntryRepositoryInput,
   ListCategoriesOptions,
   SupabaseCategoryRow,
+  SupabasePhotoReferenceRow,
   SupabaseSettingsRow,
   SupabaseTimeEntryRow,
   SupabaseUserProfileRow,
@@ -36,12 +39,15 @@ import type {
   UpdateCategoryRepositoryInput,
   UpdateSettingsInput,
   UpdateTimeEntryRepositoryInput,
+  UploadThumbnailInput,
+  UpsertPhotoReferenceInput,
   UpsertWeekReviewInput,
 } from './types';
 
 const READ_ERROR_MESSAGE = '서버 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
 const WRITE_ERROR_MESSAGE =
   '서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.';
+export const THUMBNAIL_STORAGE_BUCKET = 'thumbnailStorage';
 
 export class SupabaseUserProfileRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -70,6 +76,26 @@ export class SupabaseUserProfileRepository {
     }
 
     return mapUserProfileRow(data as SupabaseUserProfileRow);
+  }
+}
+
+export class SupabasePhotoReferenceRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async upsertPhotoReference(input: UpsertPhotoReferenceInput): Promise<PhotoReference> {
+    const userId = await requireCurrentUserId(this.client);
+    const now = input.now ?? new Date().toISOString();
+    const { data, error } = await this.client
+      .from('photo_references')
+      .upsert(toPhotoReferenceUpsertPayload(input, userId, now), { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (error) {
+      throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+    }
+
+    return mapPhotoReferenceRow(data as SupabasePhotoReferenceRow);
   }
 }
 
@@ -581,6 +607,36 @@ export function updateSettings(
   return new SupabaseSettingsRepository(client).updateSettings(input);
 }
 
+export function upsertPhotoReference(
+  client: SupabaseClient,
+  input: UpsertPhotoReferenceInput,
+): Promise<PhotoReference> {
+  return new SupabasePhotoReferenceRepository(client).upsertPhotoReference(input);
+}
+
+export async function uploadThumbnail(
+  client: SupabaseClient,
+  input: UploadThumbnailInput,
+): Promise<string> {
+  const userId = await requireCurrentUserId(client);
+  const path = createThumbnailStoragePath(userId, input.photoReferenceId);
+  const { error } = await client.storage.from(THUMBNAIL_STORAGE_BUCKET).upload(path, input.body, {
+    cacheControl: input.cacheControl ?? '3600',
+    contentType: input.contentType ?? 'image/jpeg',
+    upsert: true,
+  });
+
+  if (error) {
+    throw createSupabaseMutationError(WRITE_ERROR_MESSAGE, error);
+  }
+
+  return path;
+}
+
+export function createThumbnailStoragePath(userId: string, photoReferenceId: string): string {
+  return `${userId}/${encodeURIComponent(photoReferenceId)}.jpg`;
+}
+
 function toCategoryInsertPayload(
   input: CreateCategoryRepositoryInput,
   userId: string,
@@ -633,6 +689,31 @@ function toSettingsUpdatePayload(input: UpdateSettingsInput, updatedAt: string) 
       ? { last_opened_week_start_date: input.lastOpenedWeekStartDate }
       : {}),
     updated_at: updatedAt,
+  };
+}
+
+function toPhotoReferenceUpsertPayload(
+  input: UpsertPhotoReferenceInput,
+  userId: string,
+  now: string,
+) {
+  return {
+    id: input.id,
+    user_id: userId,
+    entry_id: input.entryId,
+    date: input.date,
+    captured_at: input.capturedAt,
+    local_asset_id: input.localAssetId,
+    thumbnail_remote_url: input.thumbnailRemoteUrl,
+    width: input.width,
+    height: input.height,
+    media_type: input.mediaType,
+    match_type: input.matchType,
+    is_hidden: input.isHidden,
+    permission_scope: input.permissionScope,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
   };
 }
 

@@ -149,6 +149,7 @@ export default function TodayScreen() {
   const [dayPhotosLoadState, setDayPhotosLoadState] = useState<DayPhotosLoadState>('idle');
   const [dayPhotosPermissionScope, setDayPhotosPermissionScope] = useState<string | null>(null);
   const [dayPhotosErrorMessage, setDayPhotosErrorMessage] = useState<string | null>(null);
+  const [thumbnailSyncEnabled, setThumbnailSyncEnabled] = useState(false);
   const [entrySaveState, setEntrySaveState] = useState<EntrySaveState>('idle');
   const [entrySaveErrorMessage, setEntrySaveErrorMessage] = useState<string | null>(null);
   const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
@@ -329,6 +330,7 @@ export default function TodayScreen() {
     setDayPhotoReferences([]);
     setDayPhotosPermissionScope(null);
     setDayPhotosErrorMessage(null);
+    setThumbnailSyncEnabled(false);
 
     if (!envStatus.isConfigured) {
       setDayPhotosLoadState('disabled');
@@ -345,10 +347,14 @@ export default function TodayScreen() {
             assets: [],
             permissionScope: null,
             errorMessage: null,
+            thumbnailSyncEnabled: false,
           };
         }
 
-        return listDatePhotoAssets(selectedDate);
+        return listDatePhotoAssets(selectedDate).then((result) => ({
+          ...result,
+          thumbnailSyncEnabled: settings.thumbnailSyncEnabled,
+        }));
       })
       .then((result) => {
         if (!isActive) {
@@ -359,6 +365,7 @@ export default function TodayScreen() {
         setDayPhotosPermissionScope(result.permissionScope);
         setDayPhotosLoadState(result.state);
         setDayPhotosErrorMessage(result.errorMessage);
+        setThumbnailSyncEnabled(result.thumbnailSyncEnabled);
       })
       .catch((error) => {
         if (!isActive) {
@@ -367,6 +374,7 @@ export default function TodayScreen() {
 
         setDayPhotos([]);
         setDayPhotosPermissionScope(null);
+        setThumbnailSyncEnabled(false);
         setDayPhotosLoadState('error');
         setDayPhotosErrorMessage(
           error instanceof Error ? error.message : '이 날짜 사진을 불러오지 못했습니다.',
@@ -404,6 +412,7 @@ export default function TodayScreen() {
       date: selectedDate,
       assets: dayPhotos,
       entries: dayEntries,
+      thumbnailSyncEnabled,
     })
       .then((references) => {
         if (!isActive) {
@@ -427,7 +436,15 @@ export default function TodayScreen() {
     return () => {
       isActive = false;
     };
-  }, [dayEntries, dayEntriesLoadState, dayPhotos, dayPhotosLoadState, selectedDate, user]);
+  }, [
+    dayEntries,
+    dayEntriesLoadState,
+    dayPhotos,
+    dayPhotosLoadState,
+    selectedDate,
+    thumbnailSyncEnabled,
+    user,
+  ]);
 
   function moveSelectedDate(days: number) {
     setSelectedDate((currentDate) => {

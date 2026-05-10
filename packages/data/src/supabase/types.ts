@@ -2,6 +2,7 @@ import type {
   AppSettings,
   DateString,
   EntityId,
+  PhotoReference,
   TimeEntrySource,
   TimeString,
   TimestampString,
@@ -68,6 +69,25 @@ export type SupabaseSettingsRow = {
   last_opened_week_start_date: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type SupabasePhotoReferenceRow = {
+  id: string;
+  user_id: string;
+  entry_id: string | null;
+  date: string;
+  captured_at: string;
+  local_asset_id: string;
+  thumbnail_remote_url: string | null;
+  width: number | null;
+  height: number | null;
+  media_type: PhotoReference['mediaType'];
+  match_type: PhotoReference['matchType'];
+  is_hidden: boolean;
+  permission_scope: PhotoReference['permissionScope'];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 };
 
 export type ListCategoriesOptions = {
@@ -156,4 +176,27 @@ export type UpsertWeekReviewInput = {
   problems?: string;
   nextWeekFocus?: string;
   now?: TimestampString;
+};
+
+export type UpsertPhotoReferenceInput = {
+  id: EntityId;
+  entryId: EntityId | null;
+  date: DateString;
+  capturedAt: TimestampString;
+  localAssetId: string;
+  thumbnailRemoteUrl: string | null;
+  width: number | null;
+  height: number | null;
+  mediaType: PhotoReference['mediaType'];
+  matchType: PhotoReference['matchType'];
+  isHidden: boolean;
+  permissionScope: PhotoReference['permissionScope'];
+  now?: TimestampString;
+};
+
+export type UploadThumbnailInput = {
+  photoReferenceId: EntityId;
+  body: Blob | ArrayBuffer;
+  contentType?: string;
+  cacheControl?: string;
 };

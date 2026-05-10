@@ -1,7 +1,15 @@
-import type { AppSettings, Category, TimeEntry, UserProfile, WeekReview } from '@weekly/domain';
+import type {
+  AppSettings,
+  Category,
+  PhotoReference,
+  TimeEntry,
+  UserProfile,
+  WeekReview,
+} from '@weekly/domain';
 
 import type {
   SupabaseCategoryRow,
+  SupabasePhotoReferenceRow,
   SupabaseSettingsRow,
   SupabaseTimeEntryRow,
   SupabaseUserProfileRow,
@@ -78,5 +86,28 @@ export function mapSettingsRow(row: SupabaseSettingsRow): AppSettings {
     lastOpenedWeekStartDate: row.last_opened_week_start_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function mapPhotoReferenceRow(row: SupabasePhotoReferenceRow): PhotoReference {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    entryId: row.entry_id,
+    date: row.date,
+    capturedAt: row.captured_at,
+    localAssetId: row.local_asset_id,
+    localUri: null,
+    thumbnailLocalUri: null,
+    thumbnailRemoteUrl: row.thumbnail_remote_url,
+    width: row.width,
+    height: row.height,
+    mediaType: row.media_type,
+    matchType: row.match_type,
+    isHidden: row.is_hidden,
+    permissionScope: row.permission_scope,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
   };
 }

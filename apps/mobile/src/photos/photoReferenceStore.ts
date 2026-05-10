@@ -8,6 +8,7 @@ import {
 import { getLocalDatabase } from '@/lib/db/client';
 import { initializeLocalDatabase } from '@/lib/db/initialize';
 import type { DatePhotoAsset } from './datePhotoAssets';
+import { syncRemoteThumbnails, type RemoteThumbnailSyncResult } from './thumbnailSync';
 import { createLocalPhotoThumbnail } from './thumbnails';
 
 const MAX_THUMBNAIL_CANDIDATES_PER_ENTRY = 3;
@@ -38,6 +39,7 @@ export type SyncDatePhotoReferencesInput = {
   date: string;
   assets: readonly DatePhotoAsset[];
   entries: readonly TimeEntry[];
+  thumbnailSyncEnabled?: boolean;
   now?: string;
 };
 
@@ -53,6 +55,7 @@ export async function syncDatePhotoReferences({
   date,
   assets,
   entries,
+  thumbnailSyncEnabled = false,
   now = new Date().toISOString(),
 }: SyncDatePhotoReferencesInput): Promise<PhotoReference[]> {
   const database = await getLocalDatabase();
@@ -92,6 +95,12 @@ ON CONFLICT(id) DO UPDATE SET
     WHEN photoReferences.localUri = excluded.localUri
       OR (photoReferences.localUri IS NULL AND excluded.localUri IS NULL)
     THEN photoReferences.thumbnailLocalUri
+    ELSE NULL
+  END,
+  thumbnailRemoteUrl = CASE
+    WHEN photoReferences.localUri = excluded.localUri
+      OR (photoReferences.localUri IS NULL AND excluded.localUri IS NULL)
+    THEN photoReferences.thumbnailRemoteUrl
     ELSE NULL
   END,
   width = excluded.width,
@@ -140,6 +149,17 @@ WHERE id = ? AND userId = ?
   const nextReferences = await listPhotoReferencesByDate(userId, date);
 
   await ensureLocalThumbnails(userId, nextReferences, now);
+
+  if (thumbnailSyncEnabled) {
+    const thumbnailReadyReferences = await listPhotoReferencesByDate(userId, date);
+    const syncResults = await syncRemoteThumbnails({
+      userId,
+      references: thumbnailReadyReferences,
+      now,
+    });
+
+    await updateRemoteThumbnailUrls(userId, syncResults, now);
+  }
 
   return listPhotoReferencesByDate(userId, date);
 }
@@ -247,6 +267,34 @@ WHERE id = ? AND userId = ?
       // Thumbnail generation is best-effort; photo references remain useful without it.
     }
   }
+}
+
+async function updateRemoteThumbnailUrls(
+  userId: EntityId,
+  results: readonly RemoteThumbnailSyncResult[],
+  updatedAt: string,
+): Promise<void> {
+  if (results.length === 0) {
+    return;
+  }
+
+  const database = await getLocalDatabase();
+
+  await database.withTransactionAsync(async () => {
+    for (const result of results) {
+      await database.runAsync(
+        `
+UPDATE photoReferences
+SET thumbnailRemoteUrl = ?, updatedAt = ?
+WHERE id = ? AND userId = ?
+`,
+        result.thumbnailRemoteUrl,
+        updatedAt,
+        result.photoId,
+        userId,
+      );
+    }
+  });
 }
 
 function selectThumbnailCandidateReferences(
