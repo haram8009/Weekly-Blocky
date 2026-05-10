@@ -34,6 +34,7 @@ import {
   type PanResponderGestureState,
 } from 'react-native';
 
+import { useMobileAuth } from '@/auth/MobileAuthProvider';
 import { Screen } from '@/components/Screen';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
@@ -46,6 +47,7 @@ import {
 } from '@/lib/supabase/timeEntries';
 import type { DatePhotoAsset } from '@/photos/datePhotoAssets';
 import { listDatePhotoAssets } from '@/photos/mediaLibrary';
+import { syncDatePhotoReferences } from '@/photos/photoReferenceStore';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
@@ -95,6 +97,7 @@ type EntryEditDraft = {
 export default function TodayScreen() {
   const searchParams = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useMobileAuth();
   const { height: windowHeight } = useWindowDimensions();
   const windowHeightRef = useRef(windowHeight);
   windowHeightRef.current = windowHeight;
@@ -359,6 +362,39 @@ export default function TodayScreen() {
     },
     [selectionPulseValue],
   );
+
+  useEffect(() => {
+    if (
+      !user ||
+      dayEntriesLoadState !== 'ready' ||
+      dayPhotosLoadState !== 'ready' ||
+      dayPhotos.length === 0
+    ) {
+      return;
+    }
+
+    let isActive = true;
+
+    syncDatePhotoReferences({
+      userId: user.id,
+      date: selectedDate,
+      assets: dayPhotos,
+      entries: dayEntries,
+    }).catch((error) => {
+      if (!isActive) {
+        return;
+      }
+
+      setDayPhotosLoadState('error');
+      setDayPhotosErrorMessage(
+        error instanceof Error ? error.message : '사진 참조를 저장하지 못했습니다.',
+      );
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [dayEntries, dayEntriesLoadState, dayPhotos, dayPhotosLoadState, selectedDate, user]);
 
   function moveSelectedDate(days: number) {
     setSelectedDate((currentDate) => {
