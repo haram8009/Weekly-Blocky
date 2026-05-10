@@ -37,7 +37,11 @@ import {
 import { Screen } from '@/components/Screen';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
-import { createMobileTimeEntry, listMobileTimeEntriesByDate } from '@/lib/supabase/timeEntries';
+import {
+  createMobileTimeEntry,
+  listMobileTimeEntriesByDate,
+  updateMobileTimeEntry,
+} from '@/lib/supabase/timeEntries';
 import { theme } from '@/theme';
 import {
   getWeekGridSlotIndexFromPoint,
@@ -73,6 +77,15 @@ type SelectionDraft = {
 
 type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
 type EntrySaveState = 'idle' | 'saving' | 'error';
+type EntryEditSaveState = 'idle' | 'saving' | 'error';
+
+type EntryEditDraft = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  categoryId: string;
+  note: string;
+};
 
 export default function TodayScreen() {
   const searchParams = useLocalSearchParams();
@@ -117,6 +130,9 @@ export default function TodayScreen() {
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
   const [entrySaveState, setEntrySaveState] = useState<EntrySaveState>('idle');
   const [entrySaveErrorMessage, setEntrySaveErrorMessage] = useState<string | null>(null);
+  const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
+  const [editSaveState, setEditSaveState] = useState<EntryEditSaveState>('idle');
+  const [editSaveErrorMessage, setEditSaveErrorMessage] = useState<string | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const isTodaySelected = selectedDate === todayDate;
   const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
@@ -143,6 +159,13 @@ export default function TodayScreen() {
   const displayedSelection = draftSelection ?? confirmedSelection;
   const canApplySelectedRange =
     confirmedSelection !== null && timeInputError === null && entrySaveState !== 'saving';
+  const editValidationErrorMessage = useMemo(
+    () =>
+      editingEntryDraft ? getEntryEditValidationError(blocks, editingEntryDraft, categories) : null,
+    [blocks, categories, editingEntryDraft],
+  );
+  const canSaveEditedEntry =
+    editingEntryDraft !== null && editValidationErrorMessage === null && editSaveState !== 'saving';
   const canMoveSelectionStartEarlier =
     confirmedSelection !== null &&
     expandTimeRangeSelection(blocks, confirmedSelection, 'start', -1) !== null;
@@ -198,6 +221,9 @@ export default function TodayScreen() {
     setTimeInputError(null);
     setEntrySaveState('idle');
     setEntrySaveErrorMessage(null);
+    setEditingEntryDraft(null);
+    setEditSaveState('idle');
+    setEditSaveErrorMessage(null);
     selectionDraftRef.current = null;
     setSelectionDraft(null);
   }, [selectedDate]);
@@ -461,6 +487,14 @@ export default function TodayScreen() {
       return;
     }
 
+    const block = blocks[slotIndex];
+    const blockEntry = block ? getEntryCoveringBlock(block, dayEntries) : null;
+
+    if (blockEntry) {
+      openEntryEditor(blockEntry);
+      return;
+    }
+
     const nextSelection = createTimeRangeSelectionFromSlot(blocks, slotIndex);
 
     if (nextSelection) {
@@ -521,6 +555,72 @@ export default function TodayScreen() {
     } catch (error) {
       setEntrySaveState('error');
       setEntrySaveErrorMessage(getSupabaseStorageErrorMessage(error));
+    }
+  }
+
+  function openEntryEditorById(entryId: string) {
+    const entry = dayEntries.find((item) => item.id === entryId);
+
+    if (entry) {
+      openEntryEditor(entry);
+    }
+  }
+
+  function openEntryEditor(entry: TimeEntry) {
+    clearConfirmedSelection();
+    setEditingEntryDraft({
+      id: entry.id,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      categoryId: entry.categoryId,
+      note: entry.note,
+    });
+    setEditSaveState('idle');
+    setEditSaveErrorMessage(null);
+  }
+
+  function closeEntryEditor() {
+    setEditingEntryDraft(null);
+    setEditSaveState('idle');
+    setEditSaveErrorMessage(null);
+  }
+
+  function updateEditingEntryDraft(patch: Partial<Omit<EntryEditDraft, 'id'>>) {
+    setEditingEntryDraft((currentDraft) =>
+      currentDraft ? { ...currentDraft, ...patch } : currentDraft,
+    );
+    setEditSaveState('idle');
+    setEditSaveErrorMessage(null);
+  }
+
+  async function saveEditedEntry() {
+    if (!editingEntryDraft || editValidationErrorMessage || editSaveState === 'saving') {
+      return;
+    }
+
+    const draft = editingEntryDraft;
+
+    setEditSaveState('saving');
+    setEditSaveErrorMessage(null);
+
+    try {
+      await updateMobileTimeEntry({
+        id: draft.id,
+        date: selectedDate,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        categoryId: draft.categoryId,
+        note: draft.note,
+      });
+
+      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      setDayEntries(nextEntries);
+      setCategories(nextCategories);
+      setDayEntriesLoadState('ready');
+      closeEntryEditor();
+    } catch (error) {
+      setEditSaveState('error');
+      setEditSaveErrorMessage(getSupabaseStorageErrorMessage(error));
     }
   }
 
@@ -818,7 +918,7 @@ export default function TodayScreen() {
           <Text style={styles.entryListCount}>{dailySummary.entryCount}개</Text>
         </View>
 
-        {renderEntryListContent(dayEntriesLoadState, dailyEntryItems)}
+        {renderEntryListContent(dayEntriesLoadState, dailyEntryItems, openEntryEditorById)}
       </View>
 
       <Modal
@@ -997,6 +1097,144 @@ export default function TodayScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={closeEntryEditor}
+        transparent
+        visible={editingEntryDraft !== null}
+      >
+        <View style={styles.drawerOverlay}>
+          <Pressable style={styles.drawerBackdrop} onPress={closeEntryEditor} />
+          <View style={styles.categoryDrawer}>
+            <View style={styles.categoryPaletteHeader}>
+              <View>
+                <Text style={styles.categoryPaletteTitle}>기록 편집</Text>
+                <Text style={styles.categoryPaletteRange}>{formatMonthDay(selectedDate)}</Text>
+              </View>
+            </View>
+
+            {editingEntryDraft ? (
+              <>
+                <View style={styles.timeInputRow}>
+                  <View style={styles.timeInputGroup}>
+                    <Text style={styles.timeInputLabel}>시작</Text>
+                    <TextInput
+                      accessibilityLabel="편집 시작 시간"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      onChangeText={(startTime) => updateEditingEntryDraft({ startTime })}
+                      placeholder="HH:mm"
+                      style={[
+                        styles.timeInput,
+                        editValidationErrorMessage && styles.timeInputInvalid,
+                      ]}
+                      value={editingEntryDraft.startTime}
+                    />
+                  </View>
+                  <View style={styles.timeInputGroup}>
+                    <Text style={styles.timeInputLabel}>종료</Text>
+                    <TextInput
+                      accessibilityLabel="편집 종료 시간"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      onChangeText={(endTime) => updateEditingEntryDraft({ endTime })}
+                      placeholder="HH:mm"
+                      style={[
+                        styles.timeInput,
+                        editValidationErrorMessage && styles.timeInputInvalid,
+                      ]}
+                      value={editingEntryDraft.endTime}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.editFieldGroup}>
+                  <Text style={styles.timeInputLabel}>카테고리</Text>
+                  <View style={styles.categoryButtonList}>
+                    {categoryPaletteItems.map((category) => {
+                      const isSelected = category.id === editingEntryDraft.categoryId;
+
+                      return (
+                        <Pressable
+                          key={category.id}
+                          accessibilityRole="button"
+                          onPress={() => updateEditingEntryDraft({ categoryId: category.id })}
+                          style={({ pressed }) => [
+                            styles.categoryButton,
+                            {
+                              backgroundColor: category.color,
+                              borderColor: category.color,
+                            },
+                            isSelected && styles.categoryButtonSelected,
+                            pressed && styles.categoryButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.categoryButtonText}>
+                            {category.emoji} {category.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.editFieldGroup}>
+                  <Text style={styles.timeInputLabel}>메모</Text>
+                  <TextInput
+                    accessibilityLabel="기록 메모"
+                    multiline
+                    onChangeText={(note) => updateEditingEntryDraft({ note })}
+                    placeholder="메모"
+                    style={[styles.timeInput, styles.noteInput]}
+                    value={editingEntryDraft.note}
+                  />
+                </View>
+
+                {editValidationErrorMessage ? (
+                  <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
+                ) : null}
+                {editSaveErrorMessage ? (
+                  <Text style={styles.categorySaveError}>{editSaveErrorMessage}</Text>
+                ) : null}
+                {editSaveState === 'saving' ? (
+                  <Text style={styles.categorySaveStatus}>수정 내용을 저장하고 있습니다.</Text>
+                ) : null}
+
+                <View style={styles.editActionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={closeEntryEditor}
+                    style={({ pressed }) => [
+                      styles.secondaryActionButton,
+                      pressed && styles.secondaryActionButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryActionButtonText}>취소</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !canSaveEditedEntry }}
+                    disabled={!canSaveEditedEntry}
+                    onPress={() => void saveEditedEntry()}
+                    style={({ pressed }) => [
+                      styles.primaryActionButton,
+                      !canSaveEditedEntry && styles.primaryActionButtonDisabled,
+                      pressed && canSaveEditedEntry && styles.primaryActionButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.primaryActionButtonText}>저장</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -1018,6 +1256,24 @@ function getEntryCoveringBlock(
         !entry.deletedAt && entry.startTime <= block.startTime && entry.endTime >= block.endTime,
     ) ?? null
   );
+}
+
+function getEntryEditValidationError(
+  blocks: readonly WeekGridBlock[],
+  draft: EntryEditDraft,
+  categories: readonly Category[],
+): string | null {
+  const rangeResult = createTimeRangeSelectionFromTimes(blocks, draft.startTime, draft.endTime);
+
+  if (!rangeResult.isValid) {
+    return rangeResult.errorMessage;
+  }
+
+  if (!categories.some((category) => category.id === draft.categoryId && !category.deletedAt)) {
+    return '카테고리를 선택해주세요.';
+  }
+
+  return null;
 }
 
 function getPointDistance(firstPoint: WeekGridSlotPoint, secondPoint: WeekGridSlotPoint): number {
@@ -1098,7 +1354,11 @@ function createHourlyRows(
   return rows;
 }
 
-function renderEntryListContent(state: DayEntriesLoadState, items: readonly DailyEntryListItem[]) {
+function renderEntryListContent(
+  state: DayEntriesLoadState,
+  items: readonly DailyEntryListItem[],
+  onEntryPress: (entryId: string) => void,
+) {
   if (state === 'loading' || state === 'idle') {
     return <Text style={styles.entryListStatus}>기록 목록을 불러오고 있습니다.</Text>;
   }
@@ -1120,7 +1380,12 @@ function renderEntryListContent(state: DayEntriesLoadState, items: readonly Dail
   return (
     <View style={styles.entryCardList}>
       {items.map((item) => (
-        <View key={item.id} style={styles.entryCard}>
+        <Pressable
+          key={item.id}
+          accessibilityRole="button"
+          onPress={() => onEntryPress(item.id)}
+          style={({ pressed }) => [styles.entryCard, pressed && styles.entryCardPressed]}
+        >
           <View style={[styles.entryColorBar, { backgroundColor: item.categoryColor }]} />
           <View style={styles.entryCardBody}>
             <View style={styles.entryCardHeader}>
@@ -1132,7 +1397,7 @@ function renderEntryListContent(state: DayEntriesLoadState, items: readonly Dail
             </Text>
             {item.note ? <Text style={styles.entryNote}>{item.note}</Text> : null}
           </View>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
@@ -1338,6 +1603,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     backgroundColor: theme.color.surface,
   },
+  entryCardPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
   entryColorBar: {
     width: 6,
   },
@@ -1507,6 +1775,9 @@ const styles = StyleSheet.create({
   categoryButtonPressed: {
     opacity: 0.82,
   },
+  categoryButtonSelected: {
+    borderColor: theme.color.text,
+  },
   categoryButtonDisabled: {
     opacity: 0.42,
   },
@@ -1514,6 +1785,57 @@ const styles = StyleSheet.create({
     color: theme.color.surface,
     fontSize: theme.typography.caption,
     fontWeight: '800',
+  },
+  editFieldGroup: {
+    gap: theme.spacing.sm,
+  },
+  noteInput: {
+    minHeight: 88,
+    paddingTop: theme.spacing.md,
+    textAlignVertical: 'top',
+  },
+  editActionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  primaryActionButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.primary,
+    paddingHorizontal: theme.spacing.md,
+  },
+  primaryActionButtonPressed: {
+    backgroundColor: theme.color.primaryPressed,
+  },
+  primaryActionButtonDisabled: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  primaryActionButtonText: {
+    color: theme.color.surface,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  secondaryActionButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    paddingHorizontal: theme.spacing.md,
+  },
+  secondaryActionButtonPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  secondaryActionButtonText: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
   },
   categorySaveStatus: {
     color: theme.color.textMuted,
