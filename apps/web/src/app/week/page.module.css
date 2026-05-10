@@ -4,10 +4,10 @@
 }
 
 .header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 24px;
+  align-items: end;
 }
 
 .eyebrow {
@@ -30,6 +30,27 @@
   font-size: 14px;
 }
 
+.headerActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.headerActions button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  color: #17211b;
+  background: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.headerActions button:hover {
+  background: #eef3f1;
+}
+
 .summary {
   display: grid;
   min-width: 132px;
@@ -50,6 +71,23 @@
   font-size: 22px;
 }
 
+.statusText,
+.statusError {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #627168;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.statusError {
+  border-color: #b23a48;
+  color: #b23a48;
+}
+
 .contentGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -59,8 +97,9 @@
 
 .weekGrid {
   display: grid;
-  overflow: hidden;
-  grid-template-columns: 72px repeat(7, minmax(72px, 1fr));
+  overflow: auto;
+  grid-template-columns: 64px repeat(7, minmax(76px, 1fr));
+  max-height: calc(100vh - 190px);
   border: 1px solid #d8e0dc;
   border-radius: 8px;
   background: #ffffff;
@@ -70,9 +109,19 @@
 .dayCell,
 .timeCell,
 .blockCell {
-  min-height: 52px;
   border-right: 1px solid #d8e0dc;
   border-bottom: 1px solid #d8e0dc;
+}
+
+.cornerCell,
+.dayCell {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+}
+
+.cornerCell {
+  background: #eef3f1;
 }
 
 .dayCell,
@@ -80,13 +129,19 @@
   display: grid;
   place-items: center;
   color: #627168;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
-  background: #eef3f1;
 }
 
 .dayCell {
   gap: 2px;
+  min-height: 52px;
+  background: #eef3f1;
+}
+
+.todayCell {
+  color: #17211b;
+  background: #dcebe6;
 }
 
 .dayCell small {
@@ -95,21 +150,26 @@
 }
 
 .timeCell {
+  min-height: 10px;
   justify-items: end;
-  padding-right: 12px;
+  padding-right: 10px;
   background: #ffffff;
+  font-size: 10px;
 }
 
 .blockCell {
-  background:
-    linear-gradient(#ffffff, #ffffff) padding-box,
-    linear-gradient(90deg, rgba(35, 108, 92, 0.08), rgba(217, 130, 75, 0.08))
-      border-box;
+  min-height: 10px;
+  background: #f7f8fa;
+}
+
+.blockCell:hover {
+  outline: 1px solid #236c5c;
+  outline-offset: -1px;
 }
 
 .sidePanel {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   padding: 18px;
   border: 1px solid #d8e0dc;
   border-radius: 8px;
@@ -129,10 +189,49 @@
   line-height: 1.5;
 }
 
+.totalList {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.totalList li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  color: #17211b;
+  font-size: 13px;
+}
+
+.totalList span {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.totalList strong {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.totalList em {
+  color: #627168;
+  font-style: normal;
+  font-weight: 800;
+}
+
 @media (max-width: 900px) {
   .header {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .headerActions {
+    flex-wrap: wrap;
   }
 
   .contentGrid {
@@ -140,7 +239,6 @@
   }
 
   .weekGrid {
-    overflow-x: auto;
-    grid-template-columns: 72px repeat(7, 96px);
+    grid-template-columns: 64px repeat(7, 92px);
   }
 }
