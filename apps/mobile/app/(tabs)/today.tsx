@@ -2,8 +2,6 @@ import {
   addDaysToDate,
   buildWeekGrid,
   createWeekGridTimeRangeSelection,
-  DEFAULT_WEEK_GRID_START_TIME,
-  DEFAULT_WEEK_GRID_END_TIME,
   EXAMPLE_CATEGORY_DEFINITIONS,
   getWeekStartDate,
   WEEK_GRID_SLOT_MINUTES,
@@ -1132,45 +1130,9 @@ export default function TodayScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.dailySummary}>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>완성률</Text>
-          <Text style={styles.summaryMetricValue}>{dailySummary.completionRate}%</Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>기록</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDuration(dailySummary.recordedMinutes)}
-          </Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>미기록</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDuration(dailySummary.unrecordedMinutes)}
-          </Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>최다</Text>
-          <Text style={styles.summaryMetricValue}>{dailySummary.topCategoryLabel ?? '없음'}</Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>사진</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDayPhotoSummary(dayPhotosLoadState, dayPhotos.length)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.gridHeader}>
-        <Text style={styles.gridTitle}>
-          {DEFAULT_WEEK_GRID_START_TIME}-{DEFAULT_WEEK_GRID_END_TIME}
-        </Text>
-      </View>
-
       {renderDayStateBanner(dayEntriesLoadState)}
       {renderDayPhotoStateBanner(
         dayPhotosLoadState,
-        dayPhotos.length,
         dayPhotosPermissionScope,
         dayPhotosErrorMessage,
       )}
@@ -1233,6 +1195,35 @@ export default function TodayScreen() {
               </View>
             ))}
           </View>
+        </View>
+      </View>
+
+      <View style={styles.dailySummary}>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>완성률</Text>
+          <Text style={styles.summaryMetricValue}>{dailySummary.completionRate}%</Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>기록</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDuration(dailySummary.recordedMinutes)}
+          </Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>미기록</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDuration(dailySummary.unrecordedMinutes)}
+          </Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>최다</Text>
+          <Text style={styles.summaryMetricValue}>{dailySummary.topCategoryLabel ?? '없음'}</Text>
+        </View>
+        <View style={styles.summaryMetric}>
+          <Text style={styles.summaryMetricLabel}>사진</Text>
+          <Text style={styles.summaryMetricValue}>
+            {formatDayPhotoSummary(dayPhotosLoadState, dayPhotos.length)}
+          </Text>
         </View>
       </View>
 
@@ -1790,7 +1781,6 @@ function renderDayStateBanner(state: DayEntriesLoadState) {
 
 function renderDayPhotoStateBanner(
   state: DayPhotosLoadState,
-  photoCount: number,
   permissionScope: string | null,
   errorMessage: string | null,
 ) {
@@ -1819,14 +1809,10 @@ function renderDayPhotoStateBanner(
   }
 
   if (permissionScope === 'limited') {
-    return (
-      <Text style={styles.photoStateBanner}>
-        제한 권한으로 허용된 사진 {photoCount}개를 확인했습니다.
-      </Text>
-    );
+    return null;
   }
 
-  return <Text style={styles.photoStateBanner}>이 날짜 사진 {photoCount}개를 확인했습니다.</Text>;
+  return null;
 }
 
 function renderThumbnailSyncStateBanner(errorMessage: string | null) {
@@ -2239,15 +2225,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: theme.typography.body,
     fontWeight: '900',
-  },
-  gridHeader: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  gridTitle: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '800',
   },
   dayStateBanner: {
     borderWidth: 1,
