@@ -39,6 +39,7 @@ import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
 import {
   createMobileTimeEntry,
+  deleteMobileTimeEntry,
   listMobileTimeEntriesByDate,
   updateMobileTimeEntry,
 } from '@/lib/supabase/timeEntries';
@@ -77,7 +78,7 @@ type SelectionDraft = {
 
 type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
 type EntrySaveState = 'idle' | 'saving' | 'error';
-type EntryEditSaveState = 'idle' | 'saving' | 'error';
+type EntryEditSaveState = 'idle' | 'saving' | 'deleting' | 'error';
 
 type EntryEditDraft = {
   id: string;
@@ -133,6 +134,7 @@ export default function TodayScreen() {
   const [editingEntryDraft, setEditingEntryDraft] = useState<EntryEditDraft | null>(null);
   const [editSaveState, setEditSaveState] = useState<EntryEditSaveState>('idle');
   const [editSaveErrorMessage, setEditSaveErrorMessage] = useState<string | null>(null);
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const isTodaySelected = selectedDate === todayDate;
   const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
@@ -165,7 +167,12 @@ export default function TodayScreen() {
     [blocks, categories, editingEntryDraft],
   );
   const canSaveEditedEntry =
-    editingEntryDraft !== null && editValidationErrorMessage === null && editSaveState !== 'saving';
+    editingEntryDraft !== null &&
+    editValidationErrorMessage === null &&
+    !isDeleteConfirmVisible &&
+    editSaveState !== 'saving' &&
+    editSaveState !== 'deleting';
+  const canDeleteEditedEntry = editingEntryDraft !== null && editSaveState !== 'deleting';
   const canMoveSelectionStartEarlier =
     confirmedSelection !== null &&
     expandTimeRangeSelection(blocks, confirmedSelection, 'start', -1) !== null;
@@ -224,6 +231,7 @@ export default function TodayScreen() {
     setEditingEntryDraft(null);
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setIsDeleteConfirmVisible(false);
     selectionDraftRef.current = null;
     setSelectionDraft(null);
   }, [selectedDate]);
@@ -577,12 +585,14 @@ export default function TodayScreen() {
     });
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setIsDeleteConfirmVisible(false);
   }
 
   function closeEntryEditor() {
     setEditingEntryDraft(null);
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setIsDeleteConfirmVisible(false);
   }
 
   function updateEditingEntryDraft(patch: Partial<Omit<EntryEditDraft, 'id'>>) {
@@ -591,10 +601,17 @@ export default function TodayScreen() {
     );
     setEditSaveState('idle');
     setEditSaveErrorMessage(null);
+    setIsDeleteConfirmVisible(false);
   }
 
   async function saveEditedEntry() {
-    if (!editingEntryDraft || editValidationErrorMessage || editSaveState === 'saving') {
+    if (
+      !editingEntryDraft ||
+      editValidationErrorMessage ||
+      isDeleteConfirmVisible ||
+      editSaveState === 'saving' ||
+      editSaveState === 'deleting'
+    ) {
       return;
     }
 
@@ -621,6 +638,41 @@ export default function TodayScreen() {
     } catch (error) {
       setEditSaveState('error');
       setEditSaveErrorMessage(getSupabaseStorageErrorMessage(error));
+    }
+  }
+
+  function requestDeleteEditedEntry() {
+    if (!canDeleteEditedEntry) {
+      return;
+    }
+
+    setIsDeleteConfirmVisible(true);
+    setEditSaveState('idle');
+    setEditSaveErrorMessage(null);
+  }
+
+  async function deleteEditedEntry() {
+    if (!editingEntryDraft || editSaveState === 'deleting') {
+      return;
+    }
+
+    const entryId = editingEntryDraft.id;
+
+    setEditSaveState('deleting');
+    setEditSaveErrorMessage(null);
+
+    try {
+      await deleteMobileTimeEntry({ id: entryId });
+
+      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      setDayEntries(nextEntries);
+      setCategories(nextCategories);
+      setDayEntriesLoadState('ready');
+      closeEntryEditor();
+    } catch (error) {
+      setEditSaveState('error');
+      setEditSaveErrorMessage(getSupabaseStorageErrorMessage(error));
+      setIsDeleteConfirmVisible(false);
     }
   }
 
@@ -1204,6 +1256,56 @@ export default function TodayScreen() {
                 {editSaveState === 'saving' ? (
                   <Text style={styles.categorySaveStatus}>수정 내용을 저장하고 있습니다.</Text>
                 ) : null}
+                {editSaveState === 'deleting' ? (
+                  <Text style={styles.categorySaveStatus}>기록을 삭제하고 있습니다.</Text>
+                ) : null}
+
+                {isDeleteConfirmVisible ? (
+                  <View style={styles.deleteConfirmBox}>
+                    <Text style={styles.deleteConfirmTitle}>이 기록을 삭제할까요?</Text>
+                    <View style={styles.editActionRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setIsDeleteConfirmVisible(false)}
+                        style={({ pressed }) => [
+                          styles.secondaryActionButton,
+                          pressed && styles.secondaryActionButtonPressed,
+                        ]}
+                      >
+                        <Text style={styles.secondaryActionButtonText}>취소</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: editSaveState === 'deleting' }}
+                        disabled={editSaveState === 'deleting'}
+                        onPress={() => void deleteEditedEntry()}
+                        style={({ pressed }) => [
+                          styles.deleteConfirmButton,
+                          editSaveState === 'deleting' && styles.deleteActionButtonDisabled,
+                          pressed &&
+                            editSaveState !== 'deleting' &&
+                            styles.deleteConfirmButtonPressed,
+                        ]}
+                      >
+                        <Text style={styles.deleteConfirmButtonText}>삭제</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !canDeleteEditedEntry }}
+                    disabled={!canDeleteEditedEntry}
+                    onPress={requestDeleteEditedEntry}
+                    style={({ pressed }) => [
+                      styles.deleteActionButton,
+                      !canDeleteEditedEntry && styles.deleteActionButtonDisabled,
+                      pressed && canDeleteEditedEntry && styles.deleteActionButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.deleteActionButtonText}>삭제</Text>
+                  </Pressable>
+                )}
 
                 <View style={styles.editActionRow}>
                   <Pressable
@@ -1797,6 +1899,57 @@ const styles = StyleSheet.create({
   editActionRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  deleteActionButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.danger,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    paddingHorizontal: theme.spacing.md,
+  },
+  deleteActionButtonPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  deleteActionButtonDisabled: {
+    opacity: 0.42,
+  },
+  deleteActionButtonText: {
+    color: theme.color.danger,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  deleteConfirmBox: {
+    gap: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.color.danger,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    padding: theme.spacing.md,
+  },
+  deleteConfirmTitle: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  deleteConfirmButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.danger,
+    paddingHorizontal: theme.spacing.md,
+  },
+  deleteConfirmButtonPressed: {
+    opacity: 0.84,
+  },
+  deleteConfirmButtonText: {
+    color: theme.color.surface,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
   },
   primaryActionButton: {
     flex: 1,
