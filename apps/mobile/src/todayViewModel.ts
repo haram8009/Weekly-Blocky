@@ -1,4 +1,6 @@
 import {
+  addDaysToDate,
+  getDatesOfWeek,
   getWeekStartDate,
   parseTimeToMinutes,
   type Category,
@@ -35,6 +37,27 @@ export type DailySummaryTotal = {
   ratio: number;
 };
 
+export type CalendarDateItem = {
+  date: DateString;
+  dayNumber: string;
+  isCurrentMonth: boolean;
+  isSelected: boolean;
+  isToday: boolean;
+};
+
+export type CalendarMonth = {
+  monthLabel: string;
+  weeks: CalendarDateItem[][];
+};
+
+export type WeekDateItem = {
+  date: DateString;
+  weekdayLabel: string;
+  dayNumber: string;
+  isSelected: boolean;
+  isToday: boolean;
+};
+
 type CategoryLike = Pick<Category, 'id' | 'name' | 'emoji' | 'color'>;
 type CategoryPaletteCategoryLike = Pick<
   Category,
@@ -55,6 +78,9 @@ const FALLBACK_CATEGORY = {
   emoji: '•',
   color: '#64748B',
 };
+const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'] as const;
+const CALENDAR_WEEK_COUNT = 6;
+const DAYS_PER_WEEK = 7;
 
 export function isValidDateString(value: string | null | undefined): value is DateString {
   if (!value) {
@@ -76,6 +102,78 @@ export function resolveSelectedDate(
   const candidate = Array.isArray(value) ? value[0] : value;
 
   return isValidDateString(candidate) ? candidate : fallbackDate;
+}
+
+export function createCalendarMonth({
+  visibleMonthDate,
+  selectedDate,
+  todayDate,
+}: {
+  visibleMonthDate: DateString;
+  selectedDate: DateString;
+  todayDate: DateString;
+}): CalendarMonth {
+  const monthStartDate = getMonthStartDate(visibleMonthDate);
+  const calendarStartDate = getWeekStartDate(monthStartDate, 'monday');
+  const visibleMonthKey = monthStartDate.slice(0, 7);
+  const weeks: CalendarDateItem[][] = [];
+
+  for (let weekIndex = 0; weekIndex < CALENDAR_WEEK_COUNT; weekIndex += 1) {
+    const weekItems: CalendarDateItem[] = [];
+
+    for (let dayIndex = 0; dayIndex < DAYS_PER_WEEK; dayIndex += 1) {
+      const date = addDaysToDate(calendarStartDate, weekIndex * DAYS_PER_WEEK + dayIndex);
+
+      weekItems.push({
+        date,
+        dayNumber: formatDayNumber(date),
+        isCurrentMonth: date.startsWith(visibleMonthKey),
+        isSelected: date === selectedDate,
+        isToday: date === todayDate,
+      });
+    }
+
+    weeks.push(weekItems);
+  }
+
+  return {
+    monthLabel: formatYearMonth(monthStartDate),
+    weeks,
+  };
+}
+
+export function createWeekDateItems({
+  selectedDate,
+  todayDate,
+}: {
+  selectedDate: DateString;
+  todayDate: DateString;
+}): WeekDateItem[] {
+  return getDatesOfWeek(getWeekStartDate(selectedDate, 'monday')).map((date, index) => ({
+    date,
+    weekdayLabel: WEEKDAY_LABELS[index] ?? '',
+    dayNumber: formatDayNumber(date),
+    isSelected: date === selectedDate,
+    isToday: date === todayDate,
+  }));
+}
+
+export function createWeekCalendarRows({
+  selectedDate,
+  todayDate,
+}: {
+  selectedDate: DateString;
+  todayDate: DateString;
+}): CalendarDateItem[][] {
+  return [
+    createWeekDateItems({ selectedDate, todayDate }).map((item) => ({
+      date: item.date,
+      dayNumber: item.dayNumber,
+      isCurrentMonth: true,
+      isSelected: item.isSelected,
+      isToday: item.isToday,
+    })),
+  ];
 }
 
 export function createDailyEntryListItems(
@@ -228,6 +326,22 @@ export function formatDuration(minutes: number): string {
   }
 
   return `${hours}시간 ${remainingMinutes}분`;
+}
+
+function getMonthStartDate(date: DateString): DateString {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function formatYearMonth(date: DateString): string {
+  const [yearText, monthText] = date.split('-');
+
+  return `${yearText}년 ${Number(monthText)}월`;
+}
+
+function formatDayNumber(date: DateString): string {
+  const [, , dayText] = date.split('-');
+
+  return String(Number(dayText));
 }
 
 function getEntryDurationMinutes(entry: Pick<TimeEntry, 'startTime' | 'endTime'>): number {

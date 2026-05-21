@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createCalendarMonth,
   createCategoryPaletteItems,
   createDailyEntryListItems,
   createDailySummary,
+  createWeekCalendarRows,
+  createWeekDateItems,
   formatDuration,
   resolveSelectedDate,
 } from './todayViewModel';
@@ -58,6 +61,176 @@ describe('resolveSelectedDate', () => {
   it('falls back when the route date is invalid', () => {
     expect(resolveSelectedDate('2026-02-31', '2026-05-10')).toBe('2026-05-10');
     expect(resolveSelectedDate(undefined, '2026-05-10')).toBe('2026-05-10');
+  });
+});
+
+describe('createCalendarMonth', () => {
+  it('builds a monday-start 6-week month grid with selected and today markers', () => {
+    const month = createCalendarMonth({
+      visibleMonthDate: '2026-05-21',
+      selectedDate: '2026-05-21',
+      todayDate: '2026-05-10',
+    });
+
+    expect(month.monthLabel).toBe('2026년 5월');
+    expect(month.weeks).toHaveLength(6);
+    expect(month.weeks[0]?.map((item) => item.date)).toEqual([
+      '2026-04-27',
+      '2026-04-28',
+      '2026-04-29',
+      '2026-04-30',
+      '2026-05-01',
+      '2026-05-02',
+      '2026-05-03',
+    ]);
+    expect(month.weeks[5]?.map((item) => item.date)).toEqual([
+      '2026-06-01',
+      '2026-06-02',
+      '2026-06-03',
+      '2026-06-04',
+      '2026-06-05',
+      '2026-06-06',
+      '2026-06-07',
+    ]);
+    expect(month.weeks.flat().find((item) => item.date === '2026-05-21')).toMatchObject({
+      dayNumber: '21',
+      isCurrentMonth: true,
+      isSelected: true,
+      isToday: false,
+    });
+    expect(month.weeks.flat().find((item) => item.date === '2026-05-10')).toMatchObject({
+      dayNumber: '10',
+      isCurrentMonth: true,
+      isSelected: false,
+      isToday: true,
+    });
+    expect(month.weeks.flat().find((item) => item.date === '2026-04-30')).toMatchObject({
+      isCurrentMonth: false,
+    });
+  });
+});
+
+describe('createWeekDateItems', () => {
+  it('builds monday-start week items for the selected date', () => {
+    expect(
+      createWeekDateItems({
+        selectedDate: '2026-05-21',
+        todayDate: '2026-05-20',
+      }),
+    ).toEqual([
+      {
+        date: '2026-05-18',
+        weekdayLabel: '월',
+        dayNumber: '18',
+        isSelected: false,
+        isToday: false,
+      },
+      {
+        date: '2026-05-19',
+        weekdayLabel: '화',
+        dayNumber: '19',
+        isSelected: false,
+        isToday: false,
+      },
+      {
+        date: '2026-05-20',
+        weekdayLabel: '수',
+        dayNumber: '20',
+        isSelected: false,
+        isToday: true,
+      },
+      {
+        date: '2026-05-21',
+        weekdayLabel: '목',
+        dayNumber: '21',
+        isSelected: true,
+        isToday: false,
+      },
+      {
+        date: '2026-05-22',
+        weekdayLabel: '금',
+        dayNumber: '22',
+        isSelected: false,
+        isToday: false,
+      },
+      {
+        date: '2026-05-23',
+        weekdayLabel: '토',
+        dayNumber: '23',
+        isSelected: false,
+        isToday: false,
+      },
+      {
+        date: '2026-05-24',
+        weekdayLabel: '일',
+        dayNumber: '24',
+        isSelected: false,
+        isToday: false,
+      },
+    ]);
+  });
+});
+
+describe('createWeekCalendarRows', () => {
+  it('builds one monday-start calendar row for the selected week', () => {
+    expect(
+      createWeekCalendarRows({
+        selectedDate: '2026-05-21',
+        todayDate: '2026-05-20',
+      }),
+    ).toEqual([
+      [
+        {
+          date: '2026-05-18',
+          dayNumber: '18',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: false,
+        },
+        {
+          date: '2026-05-19',
+          dayNumber: '19',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: false,
+        },
+        {
+          date: '2026-05-20',
+          dayNumber: '20',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: true,
+        },
+        {
+          date: '2026-05-21',
+          dayNumber: '21',
+          isCurrentMonth: true,
+          isSelected: true,
+          isToday: false,
+        },
+        {
+          date: '2026-05-22',
+          dayNumber: '22',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: false,
+        },
+        {
+          date: '2026-05-23',
+          dayNumber: '23',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: false,
+        },
+        {
+          date: '2026-05-24',
+          dayNumber: '24',
+          isCurrentMonth: true,
+          isSelected: false,
+          isToday: false,
+        },
+      ],
+    ]);
   });
 });
 
