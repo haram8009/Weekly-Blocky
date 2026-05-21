@@ -1,58 +1,82 @@
-import { getSupabaseStorageErrorMessage } from '@weekly/data';
 import {
   addDaysToDate,
+  createReviewChartData,
+  createWeeklyStats,
   getDatesOfWeek,
   getWeekStartDate,
+  type Category,
   type DateString,
-  type WeekReview,
+  type ReviewChartDailyBreakdown,
+  type ReviewChartData,
+  type ReviewChartGroup,
+  type TimeEntry,
 } from '@weekly/domain';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
-import {
-  getMobileWeekReviewByWeekStartDate,
-  upsertMobileWeekReview,
-} from '@/lib/supabase/weekReviews';
+import { listMobileCategories } from '@/lib/supabase/categories';
+import { listMobileTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
+import { formatDuration } from '@/todayViewModel';
 import { theme } from '@/theme';
 
 const WEEK_STEP_DAYS = 7;
+const LINE_CHART_WIDTH = 320;
+const LINE_CHART_HEIGHT = 180;
+const DONUT_SIZE = 140;
+const DONUT_RADIUS = 54;
+const DONUT_STROKE_WIDTH = 18;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 
-type WeekReviewDraft = Pick<WeekReview, 'summary' | 'wins' | 'problems' | 'nextWeekFocus'>;
-type WeekReviewLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
-type WeekReviewSaveState = 'idle' | 'saving' | 'saved' | 'error';
+type ReviewChartLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
 
 export default function ReviewScreen() {
   const todayDate = getLocalDateString();
   const todayWeekStartDate = getWeekStartDate(todayDate, 'monday');
   const [visibleWeekStartDate, setVisibleWeekStartDate] = useState<DateString>(todayWeekStartDate);
-  const [weekReview, setWeekReview] = useState<WeekReview | null>(null);
-  const [reviewDraft, setReviewDraft] = useState<WeekReviewDraft>(() => createEmptyReviewDraft());
-  const [loadState, setLoadState] = useState<WeekReviewLoadState>('idle');
-  const [saveState, setSaveState] = useState<WeekReviewSaveState>('idle');
+  const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadState, setLoadState] = useState<ReviewChartLoadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<DateString>(todayDate);
   const requestIdRef = useRef(0);
-  const visibleWeekStartDateRef = useRef(visibleWeekStartDate);
   const visibleWeekDates = useMemo(
     () => getDatesOfWeek(visibleWeekStartDate),
     [visibleWeekStartDate],
   );
   const isCurrentWeek = visibleWeekStartDate === todayWeekStartDate;
-  const latestSavedAtLabel = weekReview ? formatDateTime(weekReview.updatedAt) : '아직 저장 전';
-  const canEditReview = loadState === 'ready' && saveState !== 'saving';
+  const weeklyStats = useMemo(
+    () =>
+      createWeeklyStats({
+        entries,
+        categories,
+        weekStartDate: visibleWeekStartDate,
+      }),
+    [categories, entries, visibleWeekStartDate],
+  );
+  const chartData = useMemo(
+    () =>
+      createReviewChartData({
+        entries,
+        categories,
+        weekStartDate: visibleWeekStartDate,
+      }),
+    [categories, entries, visibleWeekStartDate],
+  );
+  const selectedDailyBreakdown =
+    chartData.dailyBreakdowns.find((day) => day.date === selectedDate) ??
+    chartData.dailyBreakdowns[0];
 
-  const loadWeekReview = useCallback((weekStartDate: DateString) => {
+  const loadReviewChartData = useCallback((weekStartDate: DateString) => {
     const envStatus = getMobileSupabaseEnvStatus();
     const requestId = requestIdRef.current + 1;
 
     requestIdRef.current = requestId;
-    setWeekReview(null);
-    setReviewDraft(createEmptyReviewDraft());
-    setSaveState('idle');
-    setSaveErrorMessage(null);
+    setEntries([]);
+    setCategories([]);
 
     if (!envStatus.isConfigured) {
       setLoadState('unconfigured');
@@ -63,14 +87,17 @@ export default function ReviewScreen() {
     setLoadState('loading');
     setErrorMessage(null);
 
-    getMobileWeekReviewByWeekStartDate(weekStartDate)
-      .then((nextWeekReview) => {
+    Promise.all([
+      listMobileTimeEntriesByWeek(weekStartDate),
+      listMobileCategories({ includeArchived: true }),
+    ])
+      .then(([nextEntries, nextCategories]) => {
         if (requestIdRef.current !== requestId) {
           return;
         }
 
-        setWeekReview(nextWeekReview);
-        setReviewDraft(createReviewDraft(nextWeekReview));
+        setEntries(nextEntries);
+        setCategories(nextCategories);
         setLoadState('ready');
       })
       .catch((error) => {
@@ -78,58 +105,22 @@ export default function ReviewScreen() {
           return;
         }
 
-        setWeekReview(null);
-        setReviewDraft(createEmptyReviewDraft());
+        setEntries([]);
+        setCategories([]);
         setLoadState('error');
         setErrorMessage(
-          error instanceof Error ? error.message : '주간 회고를 불러오지 못했습니다.',
+          error instanceof Error ? error.message : '회고 차트를 불러오지 못했습니다.',
         );
       });
   }, []);
 
-  const saveWeekReview = useCallback(async () => {
-    if (saveState === 'saving' || loadState !== 'ready') {
-      return;
-    }
-
-    const targetWeekStartDate = visibleWeekStartDate;
-
-    setSaveState('saving');
-    setSaveErrorMessage(null);
-
-    try {
-      const nextWeekReview = await upsertMobileWeekReview({
-        weekStartDate: targetWeekStartDate,
-        summary: reviewDraft.summary,
-        wins: reviewDraft.wins,
-        problems: reviewDraft.problems,
-        nextWeekFocus: reviewDraft.nextWeekFocus,
-      });
-
-      if (visibleWeekStartDateRef.current !== targetWeekStartDate) {
-        return;
-      }
-
-      setWeekReview(nextWeekReview);
-      setReviewDraft(createReviewDraft(nextWeekReview));
-      setSaveState('saved');
-    } catch (error) {
-      if (visibleWeekStartDateRef.current !== targetWeekStartDate) {
-        return;
-      }
-
-      setSaveState('error');
-      setSaveErrorMessage(getSupabaseStorageErrorMessage(error));
-    }
-  }, [loadState, reviewDraft, saveState, visibleWeekStartDate]);
+  useEffect(() => {
+    loadReviewChartData(visibleWeekStartDate);
+  }, [loadReviewChartData, visibleWeekStartDate]);
 
   useEffect(() => {
-    visibleWeekStartDateRef.current = visibleWeekStartDate;
-  }, [visibleWeekStartDate]);
-
-  useEffect(() => {
-    loadWeekReview(visibleWeekStartDate);
-  }, [loadWeekReview, visibleWeekStartDate]);
+    setSelectedDate(visibleWeekDates.includes(todayDate) ? todayDate : visibleWeekDates[0]);
+  }, [todayDate, visibleWeekDates]);
 
   function moveWeek(days: number) {
     setVisibleWeekStartDate((currentWeekStartDate) => addDaysToDate(currentWeekStartDate, days));
@@ -137,18 +128,6 @@ export default function ReviewScreen() {
 
   function moveToToday() {
     setVisibleWeekStartDate(getWeekStartDate(getLocalDateString(), 'monday'));
-  }
-
-  function updateReviewDraft(field: keyof WeekReviewDraft, value: string) {
-    setReviewDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
-
-    if (saveState !== 'saving') {
-      setSaveState('idle');
-      setSaveErrorMessage(null);
-    }
   }
 
   return (
@@ -203,56 +182,53 @@ export default function ReviewScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderText}>
-            <Text style={styles.sectionTitle}>회고 메모</Text>
-            <Text style={styles.sectionText}>마지막 저장: {latestSavedAtLabel}</Text>
+            <Text style={styles.sectionTitle}>회고 차트</Text>
+            <Text style={styles.sectionText}>기록된 시간 기준으로 색상 그룹 흐름을 봅니다.</Text>
           </View>
         </View>
-        {renderWeekReviewContent({
-          canEditReview,
+        {renderReviewChartContent({
+          chartData,
           errorMessage,
           loadState,
-          onChangeDraft: updateReviewDraft,
-          onRetry: () => loadWeekReview(visibleWeekStartDate),
-          onSave: saveWeekReview,
-          reviewDraft,
-          saveErrorMessage,
-          saveState,
+          onRetry: () => loadReviewChartData(visibleWeekStartDate),
+          selectedDailyBreakdown,
+          selectedDate,
+          setSelectedDate,
+          weeklyStats,
         })}
       </View>
     </Screen>
   );
 }
 
-function renderWeekReviewContent({
-  canEditReview,
+function renderReviewChartContent({
+  chartData,
   errorMessage,
   loadState,
-  onChangeDraft,
   onRetry,
-  onSave,
-  reviewDraft,
-  saveErrorMessage,
-  saveState,
+  selectedDailyBreakdown,
+  selectedDate,
+  setSelectedDate,
+  weeklyStats,
 }: {
-  canEditReview: boolean;
+  chartData: ReviewChartData;
   errorMessage: string | null;
-  loadState: WeekReviewLoadState;
-  onChangeDraft: (field: keyof WeekReviewDraft, value: string) => void;
+  loadState: ReviewChartLoadState;
   onRetry: () => void;
-  onSave: () => void;
-  reviewDraft: WeekReviewDraft;
-  saveErrorMessage: string | null;
-  saveState: WeekReviewSaveState;
+  selectedDailyBreakdown: ReviewChartDailyBreakdown | undefined;
+  selectedDate: DateString;
+  setSelectedDate: (date: DateString) => void;
+  weeklyStats: ReturnType<typeof createWeeklyStats>;
 }) {
   if (loadState === 'idle' || loadState === 'loading') {
-    return <Text style={styles.sectionText}>회고를 불러오고 있습니다.</Text>;
+    return <Text style={styles.sectionText}>회고 차트를 불러오고 있습니다.</Text>;
   }
 
   if (loadState === 'unconfigured') {
     return (
       <View style={styles.statusBlock}>
         <Text style={styles.errorText}>{errorMessage}</Text>
-        <Text style={styles.sectionText}>서버 연결 설정 후 회고를 저장할 수 있습니다.</Text>
+        <Text style={styles.sectionText}>서버 연결 설정 후 회고 차트를 볼 수 있습니다.</Text>
       </View>
     );
   }
@@ -260,119 +236,239 @@ function renderWeekReviewContent({
   if (loadState === 'error') {
     return (
       <View style={styles.statusBlock}>
-        <Text style={styles.errorText}>회고 조회 실패: {errorMessage}</Text>
+        <Text style={styles.errorText}>회고 차트 조회 실패: {errorMessage}</Text>
         <PrimaryButton label="다시 불러오기" onPress={onRetry} variant="secondary" />
       </View>
     );
   }
 
   return (
-    <View style={styles.reviewForm}>
-      <ReviewTextField
-        editable={canEditReview}
-        label="이번 주 요약"
-        onChangeText={(value) => onChangeDraft('summary', value)}
-        placeholder="이번 주 시간 사용을 한 문단으로 정리하세요."
-        value={reviewDraft.summary}
-      />
-      <ReviewTextField
-        editable={canEditReview}
-        label="잘한 점"
-        onChangeText={(value) => onChangeDraft('wins', value)}
-        placeholder="유지하고 싶은 선택이나 흐름을 남기세요."
-        value={reviewDraft.wins}
-      />
-      <ReviewTextField
-        editable={canEditReview}
-        label="아쉬운 점"
-        onChangeText={(value) => onChangeDraft('problems', value)}
-        placeholder="다음 주에 조정할 낭비나 막힌 지점을 적으세요."
-        value={reviewDraft.problems}
-      />
-      <ReviewTextField
-        editable={canEditReview}
-        label="다음 주 집중"
-        onChangeText={(value) => onChangeDraft('nextWeekFocus', value)}
-        placeholder="다음 주에 늘릴 것과 줄일 것을 정하세요."
-        value={reviewDraft.nextWeekFocus}
-      />
-
-      <View style={styles.actionRow}>
-        <PrimaryButton
-          disabled={saveState === 'saving'}
-          label={saveState === 'saving' ? '저장 중' : '저장'}
-          onPress={onSave}
-          style={saveState === 'saving' ? styles.disabledButton : undefined}
-        />
-        {saveState === 'error' ? (
-          <PrimaryButton label="재시도" onPress={onSave} variant="secondary" />
-        ) : null}
-      </View>
-
-      {saveState === 'saving' ? (
-        <Text style={styles.saveStatusText}>회고를 저장하고 있습니다.</Text>
-      ) : null}
-      {saveState === 'saved' ? <Text style={styles.saveStatusText}>저장되었습니다.</Text> : null}
-      {saveState === 'error' ? (
-        <View style={styles.statusBlock}>
-          <Text style={styles.errorText}>저장 실패: {saveErrorMessage}</Text>
-          <Text style={styles.sectionText}>네트워크 상태를 확인한 뒤 다시 시도하세요.</Text>
-        </View>
-      ) : null}
+    <View style={styles.chartStack}>
+      <MetricCards weeklyStats={weeklyStats} />
+      {chartData.groups.length === 0 ? (
+        <Text style={styles.sectionText}>이 주에는 아직 기록된 시간이 없습니다.</Text>
+      ) : (
+        <>
+          <WeeklyRatioLineChart chartData={chartData} />
+          <WeekdayTabs
+            days={chartData.dailyBreakdowns}
+            onSelectDate={setSelectedDate}
+            selectedDate={selectedDate}
+          />
+          <DailyDonutChart breakdown={selectedDailyBreakdown} />
+          <WeeklyTotalsTable groups={chartData.groups} />
+        </>
+      )}
     </View>
   );
 }
 
-function ReviewTextField({
-  editable,
+function MetricCards({ weeklyStats }: { weeklyStats: ReturnType<typeof createWeeklyStats> }) {
+  return (
+    <View style={styles.metricGrid}>
+      <MetricCard label="총 기록" value={formatDuration(weeklyStats.recordedMinutes)} />
+      <MetricCard label="미기록" value={formatDuration(weeklyStats.unrecordedMinutes)} />
+      <MetricCard label="완성률" value={`${weeklyStats.completionRate}%`} />
+      <MetricCard
+        label="낭비한 시간"
+        tone="danger"
+        value={formatDuration(weeklyStats.wastedMinutes)}
+      />
+    </View>
+  );
+}
+
+function MetricCard({
   label,
-  onChangeText,
-  placeholder,
+  tone,
   value,
 }: {
-  editable: boolean;
   label: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
+  tone?: 'danger';
   value: string;
 }) {
   return (
-    <View style={styles.formField}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        editable={editable}
-        multiline
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={theme.color.textMuted}
-        style={[styles.textInput, !editable && styles.textInputDisabled]}
-        textAlignVertical="top"
-        value={value}
-      />
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={[styles.metricValue, tone === 'danger' && styles.metricValueDanger]}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-function createEmptyReviewDraft(): WeekReviewDraft {
-  return {
-    summary: '',
-    wins: '',
-    problems: '',
-    nextWeekFocus: '',
-  };
+function WeeklyRatioLineChart({ chartData }: { chartData: ReviewChartData }) {
+  return (
+    <View style={styles.chartBlock}>
+      <Text style={styles.chartTitle}>주간 색상 그룹 비율</Text>
+      <Svg width="100%" height={LINE_CHART_HEIGHT} viewBox={`0 0 ${LINE_CHART_WIDTH} ${LINE_CHART_HEIGHT}`}>
+        {[0, 50, 100].map((ratio) => {
+          const y = LINE_CHART_HEIGHT - (ratio / 100) * LINE_CHART_HEIGHT;
+
+          return (
+            <Polyline
+              key={ratio}
+              points={`0,${y} ${LINE_CHART_WIDTH},${y}`}
+              stroke={theme.color.border}
+              strokeWidth={1}
+            />
+          );
+        })}
+        {chartData.groups.map((group) => (
+          <Polyline
+            key={group.key}
+            fill="none"
+            points={group.dailyPoints
+              .map((point, index) => {
+                const x = (index / 6) * LINE_CHART_WIDTH;
+                const y = LINE_CHART_HEIGHT - (point.ratio / 100) * LINE_CHART_HEIGHT;
+
+                return `${x},${y}`;
+              })
+              .join(' ')}
+            stroke={group.color}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            strokeWidth={3}
+          />
+        ))}
+      </Svg>
+      <View style={styles.weekdayLabels}>
+        {chartData.weekDates.map((date, index) => (
+          <Text key={date} style={styles.weekdayLabel}>
+            {chartData.dailyBreakdowns[index]?.weekdayLabel}
+          </Text>
+        ))}
+      </View>
+      <ChartLegend groups={chartData.groups} />
+    </View>
+  );
 }
 
-function createReviewDraft(review: WeekReview | null): WeekReviewDraft {
-  if (!review) {
-    return createEmptyReviewDraft();
-  }
+function ChartLegend({ groups }: { groups: ReviewChartGroup[] }) {
+  return (
+    <View style={styles.legend}>
+      {groups.map((group) => (
+        <View key={group.key} style={styles.legendItem}>
+          <View style={[styles.swatch, { backgroundColor: group.color }]} />
+          <Text style={styles.legendText}>{group.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
-  return {
-    summary: review.summary,
-    wins: review.wins,
-    problems: review.problems,
-    nextWeekFocus: review.nextWeekFocus,
-  };
+function WeekdayTabs({
+  days,
+  onSelectDate,
+  selectedDate,
+}: {
+  days: ReviewChartDailyBreakdown[];
+  onSelectDate: (date: DateString) => void;
+  selectedDate: DateString;
+}) {
+  return (
+    <View style={styles.weekdayTabs}>
+      {days.map((day) => {
+        const isSelected = day.date === selectedDate;
+
+        return (
+          <Pressable
+            accessibilityRole="button"
+            key={day.date}
+            onPress={() => onSelectDate(day.date)}
+            style={({ pressed }) => [
+              styles.weekdayTab,
+              isSelected && styles.weekdayTabSelected,
+              pressed && styles.weekdayTabPressed,
+            ]}
+          >
+            <Text style={[styles.weekdayTabText, isSelected && styles.weekdayTabTextSelected]}>
+              {day.weekdayLabel}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function DailyDonutChart({ breakdown }: { breakdown: ReviewChartDailyBreakdown | undefined }) {
+  let accumulatedRatio = 0;
+  const segments = breakdown?.segments ?? [];
+
+  return (
+    <View style={styles.dailyBreakdown}>
+      <View style={styles.donutWrap}>
+        <Svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}>
+          <Circle
+            cx={DONUT_SIZE / 2}
+            cy={DONUT_SIZE / 2}
+            fill="none"
+            r={DONUT_RADIUS}
+            stroke={theme.color.border}
+            strokeWidth={DONUT_STROKE_WIDTH}
+          />
+          {segments.map((segment) => {
+            const dashLength = (segment.ratio / 100) * DONUT_CIRCUMFERENCE;
+            const rotation = -90 + accumulatedRatio * 3.6;
+
+            accumulatedRatio += segment.ratio;
+
+            return (
+              <Circle
+                key={segment.key}
+                cx={DONUT_SIZE / 2}
+                cy={DONUT_SIZE / 2}
+                fill="none"
+                r={DONUT_RADIUS}
+                stroke={segment.color}
+                strokeDasharray={`${dashLength} ${DONUT_CIRCUMFERENCE - dashLength}`}
+                strokeLinecap="butt"
+                strokeWidth={DONUT_STROKE_WIDTH}
+                transform={`rotate(${rotation} ${DONUT_SIZE / 2} ${DONUT_SIZE / 2})`}
+              />
+            );
+          })}
+        </Svg>
+        {segments.length === 0 ? <Text style={styles.donutEmptyText}>기록 없음</Text> : null}
+      </View>
+      <View style={styles.segmentList}>
+        {segments.length === 0 ? (
+          <Text style={styles.sectionText}>선택한 요일에 기록된 시간이 없습니다.</Text>
+        ) : (
+          segments.map((segment) => (
+            <View key={segment.key} style={styles.segmentRow}>
+              <View style={[styles.swatch, { backgroundColor: segment.color }]} />
+              <Text style={styles.segmentLabel}>{segment.label}</Text>
+              <Text style={styles.segmentValue}>
+                {formatDuration(segment.minutes)} · {segment.ratio}%
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+    </View>
+  );
+}
+
+function WeeklyTotalsTable({ groups }: { groups: ReviewChartGroup[] }) {
+  return (
+    <View style={styles.totalsTable}>
+      {groups.map((group) => (
+        <View key={group.key} style={styles.totalRow}>
+          <View style={[styles.swatch, { backgroundColor: group.color }]} />
+          <View style={styles.totalTextGroup}>
+            <Text style={styles.totalLabel}>{group.label}</Text>
+            <Text style={styles.totalCategories}>{group.categoryNames.join(', ')}</Text>
+          </View>
+          <Text style={styles.totalValue}>
+            {formatDuration(group.totalMinutes)} · {group.ratio}% · {group.peakWeekdayLabel ?? '-'}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function getLocalDateString(date = new Date()): DateString {
@@ -398,20 +494,6 @@ function formatMonthDay(date: DateString): string {
   const [, monthText, dayText] = date.split('-');
 
   return `${Number(monthText)}월 ${Number(dayText)}일`;
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(
-    date.getDate(),
-  ).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(
-    date.getMinutes(),
-  ).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({
@@ -528,43 +610,170 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     lineHeight: 20,
   },
-  reviewForm: {
-    gap: theme.spacing.md,
+  chartStack: {
+    gap: theme.spacing.lg,
     marginTop: theme.spacing.sm,
   },
-  formField: {
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  metricCard: {
+    minWidth: '47%',
+    flexGrow: 1,
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.color.surface,
+    padding: theme.spacing.md,
+  },
+  metricLabel: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  metricValue: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '900',
+  },
+  metricValueDanger: {
+    color: theme.color.danger,
+  },
+  chartBlock: {
+    gap: theme.spacing.sm,
+  },
+  chartTitle: {
+    color: theme.color.text,
+    fontSize: theme.typography.body,
+    fontWeight: '800',
+  },
+  weekdayLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  weekdayLabel: {
+    width: 32,
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    textAlign: 'center',
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  fieldLabel: {
+  swatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  weekdayTabs: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  weekdayTab: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.color.surface,
+  },
+  weekdayTabPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  weekdayTabSelected: {
+    borderColor: theme.color.primary,
+    backgroundColor: theme.color.primary,
+  },
+  weekdayTabText: {
     color: theme.color.text,
     fontSize: theme.typography.caption,
     fontWeight: '800',
   },
-  textInput: {
-    minHeight: 104,
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.background,
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    lineHeight: 22,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+  weekdayTabTextSelected: {
+    color: theme.color.surface,
   },
-  textInputDisabled: {
-    backgroundColor: theme.color.surfaceMuted,
-    color: theme.color.textMuted,
+  dailyBreakdown: {
+    gap: theme.spacing.md,
+    alignItems: 'center',
   },
-  actionRow: {
-    gap: theme.spacing.sm,
+  donutWrap: {
+    width: DONUT_SIZE,
+    height: DONUT_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  saveStatusText: {
+  donutEmptyText: {
+    position: 'absolute',
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
-    lineHeight: 20,
+    fontWeight: '800',
+  },
+  segmentList: {
+    alignSelf: 'stretch',
+    gap: theme.spacing.sm,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  segmentLabel: {
+    flex: 1,
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  segmentValue: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  totalsTable: {
+    gap: theme.spacing.sm,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.border,
+    paddingTop: theme.spacing.sm,
+  },
+  totalTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  totalLabel: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+  },
+  totalCategories: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.caption,
+    lineHeight: 18,
+  },
+  totalValue: {
+    color: theme.color.text,
+    fontSize: theme.typography.caption,
+    fontWeight: '800',
+    textAlign: 'right',
   },
 });

@@ -360,7 +360,7 @@
 }
 
 .exportPanel,
-.reviewPanel {
+.reviewChartPanel {
   display: grid;
   gap: 12px;
   padding-top: 18px;
@@ -370,46 +370,6 @@
 .exportActions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.reviewForm {
-  display: grid;
-  gap: 12px;
-}
-
-.formField {
-  display: grid;
-  gap: 6px;
-}
-
-.formField span {
-  color: #17211b;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.formField textarea {
-  min-height: 78px;
-  resize: vertical;
-  padding: 10px 12px;
-  border: 1px solid #d8e0dc;
-  border-radius: 8px;
-  color: #17211b;
-  background: #ffffff;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.formField textarea:focus {
-  border-color: #236c5c;
-  outline: 2px solid #dcebe6;
-}
-
-.formActions {
-  display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -466,6 +426,173 @@
   color: #b23a48;
   font-size: 13px;
   font-weight: 800;
+}
+
+.chartTitle {
+  margin: 0;
+  color: #17211b;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.lineChart {
+  display: grid;
+  gap: 8px;
+}
+
+.lineChart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chartWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  color: #627168;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #17211b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+}
+
+.weekdayTabs {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.weekdayTab {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  color: #17211b;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.weekdayTab[aria-pressed='true'] {
+  border-color: #236c5c;
+  color: #ffffff;
+  background: #236c5c;
+}
+
+.dailyBreakdown {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.donutChart {
+  position: relative;
+  display: grid;
+  width: 140px;
+  height: 140px;
+  place-items: center;
+}
+
+.donutChart svg {
+  width: 140px;
+  height: 140px;
+}
+
+.donutChart span {
+  position: absolute;
+  color: #627168;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.segmentList {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.segmentRow {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  color: #17211b;
+  font-size: 13px;
+}
+
+.segmentRow strong {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmentRow em,
+.totalTableRow em {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  color: #627168;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.segmentRow small,
+.totalTableRow small {
+  color: #8b978f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.totalsTable {
+  display: grid;
+  gap: 10px;
+}
+
+.totalTableRow {
+  display: grid;
+  grid-template-columns: 10px minmax(80px, 0.8fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid #d8e0dc;
+  color: #17211b;
+  font-size: 12px;
+}
+
+.totalTableRow strong {
+  font-weight: 900;
+}
+
+.totalTableRow span:nth-child(3) {
+  overflow: hidden;
+  color: #627168;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
