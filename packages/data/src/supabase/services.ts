@@ -3,13 +3,19 @@ import type {
   EntryOverlapResolution,
   TimeEntry,
   TimestampString,
+  WeekReview,
 } from '@weekly/domain';
 import { resolveEntryOverlaps, validateTimeRange } from '@weekly/domain';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { SupabaseStorageError } from './errors';
-import { SupabaseTimeEntryRepository } from './repositories';
-import type { CreateTimeEntryInput, DeleteTimeEntryInput, UpdateTimeEntryInput } from './types';
+import { SupabaseTimeEntryRepository, SupabaseWeekReviewRepository } from './repositories';
+import type {
+  CreateTimeEntryInput,
+  DeleteTimeEntryInput,
+  UpdateTimeEntryInput,
+  UpsertWeekReviewInput,
+} from './types';
 
 export class SupabaseTimeEntryService {
   private readonly repository: SupabaseTimeEntryRepository;
@@ -146,6 +152,37 @@ export function listTimeEntriesByWeek(
   weekStartDate: DateString,
 ): Promise<TimeEntry[]> {
   return new SupabaseTimeEntryService(client).listTimeEntriesByWeek(weekStartDate);
+}
+
+export type WeekReviewReloadRepository = {
+  upsertWeekReview(input: UpsertWeekReviewInput): Promise<WeekReview>;
+  getWeekReviewByWeekStartDate(weekStartDate: DateString): Promise<WeekReview | null>;
+};
+
+export async function upsertAndReloadWeekReviewWithRepository(
+  repository: WeekReviewReloadRepository,
+  input: UpsertWeekReviewInput,
+): Promise<WeekReview> {
+  await repository.upsertWeekReview(input);
+
+  const reloadedReview = await repository.getWeekReviewByWeekStartDate(input.weekStartDate);
+
+  if (!reloadedReview) {
+    throw new SupabaseStorageError(
+      'QUERY_FAILED',
+      '회고를 저장했지만 서버에서 다시 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
+      `Week review reload returned no row: ${input.weekStartDate}`,
+    );
+  }
+
+  return reloadedReview;
+}
+
+export function upsertAndReloadWeekReview(
+  client: SupabaseClient,
+  input: UpsertWeekReviewInput,
+): Promise<WeekReview> {
+  return upsertAndReloadWeekReviewWithRepository(new SupabaseWeekReviewRepository(client), input);
 }
 
 function assertValidTimeRange(startTime: string, endTime: string): void {

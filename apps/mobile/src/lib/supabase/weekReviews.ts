@@ -1,6 +1,6 @@
 import {
   getWeekReviewByWeekStartDate,
-  upsertWeekReview,
+  upsertAndReloadWeekReview,
   type UpsertWeekReviewInput,
 } from '@weekly/data';
 import type { DateString } from '@weekly/domain';
@@ -12,7 +12,7 @@ export function getMobileWeekReviewByWeekStartDate(weekStartDate: DateString) {
 }
 
 export function upsertMobileWeekReview(input: UpsertWeekReviewInput) {
-  return upsertWeekReview(getSupabaseClient(), input);
+  return upsertAndReloadWeekReview(getSupabaseClient(), input);
 }
 
 export type { UpsertWeekReviewInput } from '@weekly/data';
