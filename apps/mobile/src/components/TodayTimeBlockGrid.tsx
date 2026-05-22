@@ -1,6 +1,8 @@
 import {
+  createDisplayTimeEntry,
   type Category,
   type PhotoReference,
+  type TimeString,
   type TimeEntry,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
@@ -20,15 +22,21 @@ import { theme } from '@/theme';
 
 const BLOCK_ROW_GAP = theme.spacing.xs;
 const BLOCK_COLUMN_GAP = 2;
+const BLOCK_MIN_HEIGHT = 30;
+const NEXT_DAY_DIVIDER_HEIGHT = 18;
 
 export type TodayHourRow = {
+  key: string;
   hourLabel: string;
+  nextDayDividerLabel?: string;
   blocks: WeekGridBlock[];
 };
 
 type TodayTimeBlockGridProps = {
   hourlyRows: readonly TodayHourRow[];
   entries: readonly TimeEntry[];
+  visibleStartTime: TimeString;
+  visibleEndTime: TimeString;
   categoryById: ReadonlyMap<string, Category>;
   displayedSelection: WeekGridTimeRangeSelection | null;
   photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>;
@@ -49,6 +57,8 @@ type TodayTimeBlockGridProps = {
 export function TodayTimeBlockGrid({
   hourlyRows,
   entries,
+  visibleStartTime,
+  visibleEndTime,
   categoryById,
   displayedSelection,
   photoReferencesByEntryId,
@@ -62,12 +72,27 @@ export function TodayTimeBlockGrid({
   onTouchMove,
   onTouchStart,
 }: TodayTimeBlockGridProps) {
+  const nextDayDividers = hourlyRows.flatMap((row, index) =>
+    row.nextDayDividerLabel
+      ? [
+          {
+            key: `${row.key}:next-day`,
+            label: row.nextDayDividerLabel,
+            top:
+              index * (BLOCK_MIN_HEIGHT + BLOCK_ROW_GAP) -
+              BLOCK_ROW_GAP / 2 -
+              NEXT_DAY_DIVIDER_HEIGHT / 2,
+          },
+        ]
+      : [],
+  );
+
   return (
     <View style={styles.dayGrid}>
       <View style={styles.gridBody}>
         <View style={styles.timeLabelColumn}>
           {hourlyRows.map((row) => (
-            <Text key={row.hourLabel} style={styles.timeLabel}>
+            <Text key={row.key} style={styles.timeLabel}>
               {row.hourLabel}
             </Text>
           ))}
@@ -83,13 +108,19 @@ export function TodayTimeBlockGrid({
           {...panHandlers}
         >
           {hourlyRows.map((row) => (
-            <View key={row.hourLabel} style={styles.hourBlocks}>
+            <View key={row.key} style={styles.hourBlocks}>
               {row.blocks.map((block) => {
-                const blockEntry = getEntryCoveringBlock(block, entries);
+                const blockEntryMatch = getEntryCoveringBlock(
+                  block,
+                  entries,
+                  visibleStartTime,
+                  visibleEndTime,
+                );
+                const blockEntry = blockEntryMatch?.entry ?? null;
                 const blockCategory = blockEntry ? categoryById.get(blockEntry.categoryId) : null;
                 const isSelected = isBlockSelected(block.slotIndex, displayedSelection);
                 const blockPhotoReferences =
-                  blockEntry && block.startTime === blockEntry.startTime
+                  blockEntry && block.startTime === blockEntryMatch?.displayStartTime
                     ? (photoReferencesByEntryId.get(blockEntry.id) ?? [])
                     : [];
 
@@ -120,6 +151,16 @@ export function TodayTimeBlockGrid({
             </View>
           ))}
         </View>
+        {nextDayDividers.map((divider) => (
+          <View
+            key={divider.key}
+            pointerEvents="none"
+            style={[styles.nextDayDivider, { top: divider.top }]}
+          >
+            <View style={styles.nextDayDividerLine} />
+            <Text style={styles.nextDayDividerText}>{divider.label}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -142,12 +183,27 @@ function BlockPhotoIndicator({ references }: { references: readonly PhotoReferen
 function getEntryCoveringBlock(
   block: WeekGridBlock,
   entries: readonly TimeEntry[],
-): TimeEntry | null {
+  visibleStartTime: TimeString,
+  visibleEndTime: TimeString,
+): { entry: TimeEntry; displayStartTime: TimeString } | null {
   return (
-    entries.find(
-      (entry) =>
-        !entry.deletedAt && entry.startTime <= block.startTime && entry.endTime >= block.endTime,
-    ) ?? null
+    entries.flatMap((entry) => {
+      if (entry.deletedAt) {
+        return [];
+      }
+
+      const displayEntry = createDisplayTimeEntry({
+        entry,
+        visibleStartTime,
+        visibleEndTime,
+      });
+
+      return displayEntry.displayDate === block.date &&
+        displayEntry.displayStartTime <= block.startTime &&
+        displayEntry.displayEndTime >= block.endTime
+        ? [{ entry, displayStartTime: displayEntry.displayStartTime }]
+        : [];
+    })[0] ?? null
   );
 }
 
@@ -164,6 +220,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   gridBody: {
+    position: 'relative',
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
@@ -172,10 +229,10 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     width: 44,
-    minHeight: 30,
+    minHeight: BLOCK_MIN_HEIGHT,
     color: theme.color.textMuted,
     fontSize: 11,
-    lineHeight: 30,
+    lineHeight: BLOCK_MIN_HEIGHT,
   },
   blockMatrix: {
     flex: 1,
@@ -187,11 +244,11 @@ const styles = StyleSheet.create({
   },
   blockContainer: {
     flex: 1,
-    minHeight: 30,
+    minHeight: BLOCK_MIN_HEIGHT,
   },
   emptyBlock: {
     flex: 1,
-    minHeight: 30,
+    minHeight: BLOCK_MIN_HEIGHT,
     borderWidth: 0,
     borderColor: 'transparent',
     borderRadius: 3,
@@ -220,5 +277,29 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.accent,
     borderWidth: 1,
     borderColor: theme.color.primary,
+  },
+  nextDayDivider: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    height: NEXT_DAY_DIVIDER_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextDayDividerLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: NEXT_DAY_DIVIDER_HEIGHT / 2,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: theme.color.border,
+  },
+  nextDayDividerText: {
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.color.background,
+    color: theme.color.textMuted,
+    fontSize: 11,
+    lineHeight: 14,
   },
 });

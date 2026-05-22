@@ -1,6 +1,9 @@
-import { EXAMPLE_CATEGORY_DEFINITIONS } from '@weekly/domain';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { EXAMPLE_CATEGORY_DEFINITIONS, type WeekGridBlock } from '@weekly/domain';
+import { useMemo } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { TimeSelectField } from '@/components/TimeSelectField';
+import { createTimeOptionsFromBlocks } from '@/components/TimeSelectOptions';
 import { theme } from '@/theme';
 import { type EntrySaveState } from '@/todayScreenTypes';
 
@@ -16,6 +19,7 @@ type TimeRangeCategoryDrawerProps = {
   selectedRangeLabel: string | null;
   timeInputStart: string;
   timeInputEnd: string;
+  timeBlocks: readonly WeekGridBlock[];
   timeInputError: string | null;
   categoryPaletteItems: readonly CategoryPaletteItem[];
   canApplySelectedRange: boolean;
@@ -36,6 +40,7 @@ export function TimeRangeCategoryDrawer({
   selectedRangeLabel,
   timeInputStart,
   timeInputEnd,
+  timeBlocks,
   timeInputError,
   categoryPaletteItems,
   canApplySelectedRange,
@@ -50,6 +55,15 @@ export function TimeRangeCategoryDrawer({
   onUpdateTimeInput,
   onApplyCategory,
 }: TimeRangeCategoryDrawerProps) {
+  const startTimeOptions = useMemo(
+    () => createTimeOptionsFromBlocks(timeBlocks, 'start'),
+    [timeBlocks],
+  );
+  const endTimeOptions = useMemo(
+    () => createTimeOptionsFromBlocks(timeBlocks, 'end'),
+    [timeBlocks],
+  );
+
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.drawerOverlay}>
@@ -94,34 +108,22 @@ export function TimeRangeCategoryDrawer({
               </View>
 
               <View style={styles.timeInputRow}>
-                <View style={styles.timeInputGroup}>
-                  <Text style={styles.timeInputLabel}>시작</Text>
-                  <TextInput
-                    accessibilityLabel="시작 시간 직접 입력"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                    onChangeText={(nextStartTime) => onUpdateTimeInput(nextStartTime, timeInputEnd)}
-                    placeholder="HH:mm"
-                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                    value={timeInputStart}
-                  />
-                </View>
-                <View style={styles.timeInputGroup}>
-                  <Text style={styles.timeInputLabel}>종료</Text>
-                  <TextInput
-                    accessibilityLabel="종료 시간 직접 입력"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                    onChangeText={(nextEndTime) => onUpdateTimeInput(timeInputStart, nextEndTime)}
-                    placeholder="HH:mm"
-                    style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                    value={timeInputEnd}
-                  />
-                </View>
+                <TimeSelectField
+                  accessibilityLabel="시작 시간 선택"
+                  invalid={Boolean(timeInputError)}
+                  label="시작"
+                  onChange={(nextStartTime) => onUpdateTimeInput(nextStartTime, timeInputEnd)}
+                  options={startTimeOptions}
+                  value={timeInputStart}
+                />
+                <TimeSelectField
+                  accessibilityLabel="종료 시간 선택"
+                  invalid={Boolean(timeInputError)}
+                  label="종료"
+                  onChange={(nextEndTime) => onUpdateTimeInput(timeInputStart, nextEndTime)}
+                  options={endTimeOptions}
+                  value={timeInputEnd}
+                />
               </View>
               {timeInputError ? <Text style={styles.timeInputError}>{timeInputError}</Text> : null}
             </View>
@@ -289,30 +291,6 @@ const styles = StyleSheet.create({
   timeInputRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-  },
-  timeInputGroup: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  timeInputLabel: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  timeInput: {
-    minHeight: 44,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: 0,
-    backgroundColor: theme.color.surface,
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '500',
-    paddingHorizontal: 0,
-  },
-  timeInputInvalid: {
-    borderColor: theme.color.danger,
   },
   timeInputError: {
     color: theme.color.danger,

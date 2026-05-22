@@ -4,12 +4,17 @@ import { getSupabaseStorageErrorMessage, SupabaseStorageError } from '@weekly/da
 import {
   addDaysToDate,
   buildWeekGrid,
+  createDisplayTimeEntry,
+  DEFAULT_APP_SETTINGS,
   createReviewChartData,
   createWeeklyStats,
   getWeekStartDate,
+  parseDiaryTimeToMinutes,
+  type AppSettings,
   type Category,
   type DateString,
   type PhotoReference,
+  type TimeString,
   type ReviewChartDailyBreakdown,
   type ReviewChartData,
   type ReviewChartGroup,
@@ -26,7 +31,12 @@ import {
   listWebPhotoReferenceCountsByEntryIds,
   listWebPhotoReferencesByWeek,
 } from '@/lib/supabase/photoReferences';
-import { listWebTimeEntries, listWebTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
+import {
+  listWebTimeEntries,
+  listWebTimeEntriesByDate,
+  listWebTimeEntriesByWeek,
+} from '@/lib/supabase/timeEntries';
+import { ensureWebDefaultSettings, getWebSettings } from '@/lib/supabase/settings';
 import styles from './page.module.css';
 
 const days = ['월', '화', '수', '목', '금', '토', '일'];
@@ -40,6 +50,16 @@ const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 type WeekLoadState = 'idle' | 'loading' | 'ready' | 'error';
 type CsvExportState = 'idle' | 'week' | 'all';
 type WeekSummaryMode = 'color' | 'name' | 'emoji';
+type VisibleGridSettings = Pick<
+  AppSettings,
+  'visibleStartTime' | 'visibleEndTime' | 'useFullDayView'
+>;
+
+const DEFAULT_VISIBLE_GRID_SETTINGS: VisibleGridSettings = {
+  visibleStartTime: DEFAULT_APP_SETTINGS.visibleStartTime,
+  visibleEndTime: DEFAULT_APP_SETTINGS.visibleEndTime,
+  useFullDayView: DEFAULT_APP_SETTINGS.useFullDayView,
+};
 
 export default function WeekPage() {
   const todayDate = getLocalDateString();
@@ -47,8 +67,12 @@ export default function WeekPage() {
     getWeekStartDate(todayDate, 'monday'),
   );
   const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [gridEntries, setGridEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [photoReferences, setPhotoReferences] = useState<PhotoReference[]>([]);
+  const [visibleGridSettings, setVisibleGridSettings] = useState<VisibleGridSettings>(
+    DEFAULT_VISIBLE_GRID_SETTINGS,
+  );
   const [loadState, setLoadState] = useState<WeekLoadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [summaryMode, setSummaryMode] = useState<WeekSummaryMode>('name');
@@ -57,9 +81,19 @@ export default function WeekPage() {
   const [csvExportState, setCsvExportState] = useState<CsvExportState>('idle');
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportErrorMessage, setCsvExportErrorMessage] = useState<string | null>(null);
+  const visibleGridRange = useMemo(
+    () => getEffectiveVisibleGridRange(visibleGridSettings),
+    [visibleGridSettings],
+  );
   const weekGrid = useMemo(
-    () => buildWeekGrid({ weekStartDate: visibleWeekStartDate }),
-    [visibleWeekStartDate],
+    () =>
+      buildWeekGrid({
+        weekStartDate: visibleWeekStartDate,
+        visibleStartTime: visibleGridRange.visibleStartTime,
+        visibleEndTime: visibleGridRange.visibleEndTime,
+        useFullDayView: visibleGridSettings.useFullDayView,
+      }),
+    [visibleGridRange, visibleGridSettings.useFullDayView, visibleWeekStartDate],
   );
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -157,18 +191,42 @@ export default function WeekPage() {
     setErrorMessage(null);
 
     Promise.all([
+      getWebSettings().then((settings) => settings ?? ensureWebDefaultSettings()),
       listWebTimeEntriesByWeek(visibleWeekStartDate),
       listWebCategories({ includeArchived: true }),
       listWebPhotoReferencesByWeek(visibleWeekStartDate),
     ])
-      .then(([nextEntries, nextCategories, nextPhotoReferences]) => {
+      .then(async ([nextSettings, nextEntries, nextCategories, nextPhotoReferences]) => {
+        if (!isActive) {
+          return;
+        }
+
+        const nextVisibleGridRange = getEffectiveVisibleGridRange({
+          visibleStartTime: nextSettings.visibleStartTime,
+          visibleEndTime: nextSettings.visibleEndTime,
+          useFullDayView: nextSettings.useFullDayView,
+        });
+        const nextGridEntries =
+          parseDiaryTimeToMinutes(nextVisibleGridRange.visibleEndTime) > 24 * 60
+            ? [
+                ...nextEntries,
+                ...(await listWebTimeEntriesByDate(addDaysToDate(visibleWeekStartDate, 7))),
+              ]
+            : nextEntries;
+
         if (!isActive) {
           return;
         }
 
         setEntries(nextEntries);
+        setGridEntries(nextGridEntries);
         setCategories(nextCategories);
         setPhotoReferences(nextPhotoReferences);
+        setVisibleGridSettings({
+          visibleStartTime: nextSettings.visibleStartTime,
+          visibleEndTime: nextSettings.visibleEndTime,
+          useFullDayView: nextSettings.useFullDayView,
+        });
         setLoadState('ready');
       })
       .catch((error) => {
@@ -177,6 +235,7 @@ export default function WeekPage() {
         }
 
         setEntries([]);
+        setGridEntries([]);
         setCategories([]);
         setPhotoReferences([]);
         setLoadState('error');
@@ -253,10 +312,12 @@ export default function WeekPage() {
             {weekGrid.days[0]?.blocks.map((_, slotIndex) => (
               <Row
                 categoryById={categoryById}
-                entries={visibleEntries}
+                entries={gridEntries}
                 key={slotIndex}
                 photoReferencesByEntryId={photoReferencesByEntryId}
                 slotIndex={slotIndex}
+                visibleEndTime={visibleGridRange.visibleEndTime}
+                visibleStartTime={visibleGridRange.visibleStartTime}
                 weekDays={weekGrid.days}
               />
             ))}
@@ -387,12 +448,16 @@ function Row({
   entries,
   photoReferencesByEntryId,
   slotIndex,
+  visibleEndTime,
+  visibleStartTime,
   weekDays,
 }: {
   categoryById: Map<string, Category>;
   entries: readonly TimeEntry[];
   photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>;
   slotIndex: number;
+  visibleEndTime: TimeString;
+  visibleStartTime: TimeString;
   weekDays: ReturnType<typeof buildWeekGrid>['days'];
 }) {
   const labelBlock = weekDays[0]?.blocks[slotIndex];
@@ -403,10 +468,13 @@ function Row({
       <div className={styles.timeCell}>{showTimeLabel ? labelBlock?.startTime : ''}</div>
       {weekDays.map((day) => {
         const block = day.blocks[slotIndex];
-        const entry = block ? getEntryCoveringBlock(block, entries) : null;
+        const entryMatch = block
+          ? getEntryCoveringBlock(block, entries, visibleStartTime, visibleEndTime)
+          : null;
+        const entry = entryMatch?.entry ?? null;
         const category = entry ? categoryById.get(entry.categoryId) : null;
         const entryPhotoReferences =
-          entry && block?.startTime === entry.startTime
+          entry && block?.startTime === entryMatch?.displayStartTime
             ? (photoReferencesByEntryId.get(entry.id) ?? [])
             : [];
 
@@ -678,15 +746,44 @@ function ReviewTotalsTable({ groups }: { groups: readonly ReviewChartGroup[] }) 
 function getEntryCoveringBlock(
   block: WeekGridBlock,
   entries: readonly TimeEntry[],
-): TimeEntry | null {
+  visibleStartTime: TimeString,
+  visibleEndTime: TimeString,
+): { entry: TimeEntry; displayStartTime: TimeString } | null {
   return (
-    entries.find(
-      (entry) =>
-        entry.date === block.date &&
-        entry.startTime <= block.startTime &&
-        entry.endTime >= block.endTime,
-    ) ?? null
+    entries.flatMap((entry) => {
+      if (entry.deletedAt) {
+        return [];
+      }
+
+      const displayEntry = createDisplayTimeEntry({
+        entry,
+        visibleStartTime,
+        visibleEndTime,
+      });
+
+      return displayEntry.displayDate === block.date &&
+        displayEntry.displayStartTime <= block.startTime &&
+        displayEntry.displayEndTime >= block.endTime
+        ? [{ entry, displayStartTime: displayEntry.displayStartTime }]
+        : [];
+    })[0] ?? null
   );
+}
+
+function getEffectiveVisibleGridRange(
+  settings: VisibleGridSettings,
+): Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'> {
+  if (settings.useFullDayView) {
+    return {
+      visibleStartTime: '00:00',
+      visibleEndTime: '24:00',
+    };
+  }
+
+  return {
+    visibleStartTime: settings.visibleStartTime,
+    visibleEndTime: settings.visibleEndTime,
+  };
 }
 
 function formatDuration(minutes: number): string {

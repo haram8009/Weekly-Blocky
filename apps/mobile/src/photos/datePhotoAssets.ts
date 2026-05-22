@@ -40,7 +40,7 @@ export function createDatePhotoQueryRange(date: DateString): {
 } {
   return {
     createdAfter: createLocalDateStart(date),
-    createdBefore: createLocalDateStart(addDaysToDate(date, 1)),
+    createdBefore: createLocalDateStart(addDaysToDate(date, 2)),
   };
 }
 

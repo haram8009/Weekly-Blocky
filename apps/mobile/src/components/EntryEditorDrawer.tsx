@@ -2,6 +2,8 @@ import { type DateString, type PhotoReference } from '@weekly/domain';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { EntryPhotoReferenceList } from '@/components/EntryPhotoReferenceList';
+import { TimeSelectField } from '@/components/TimeSelectField';
+import { createDiaryTimeOptions } from '@/components/TimeSelectOptions';
 import { theme } from '@/theme';
 import {
   type DayPhotosLoadState,
@@ -16,6 +18,10 @@ type CategoryPaletteItem = {
   emoji: string;
   color: string;
 };
+
+const DIARY_TIME_OPTIONS = createDiaryTimeOptions();
+const DIARY_START_TIME_OPTIONS = DIARY_TIME_OPTIONS.slice(0, -1);
+const DIARY_END_TIME_OPTIONS = DIARY_TIME_OPTIONS.slice(1);
 
 type EntryEditorDrawerProps = {
   selectedDate: DateString;
@@ -90,40 +96,22 @@ export function EntryEditorDrawer({
             {draft ? (
               <>
                 <View style={styles.timeInputRow}>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>시작</Text>
-                    <TextInput
-                      accessibilityLabel="편집 시작 시간"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(startTime) => onUpdateDraft({ startTime })}
-                      placeholder="HH:mm"
-                      style={[
-                        styles.timeInput,
-                        editValidationErrorMessage && styles.timeInputInvalid,
-                      ]}
-                      value={draft.startTime}
-                    />
-                  </View>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>종료</Text>
-                    <TextInput
-                      accessibilityLabel="편집 종료 시간"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(endTime) => onUpdateDraft({ endTime })}
-                      placeholder="HH:mm"
-                      style={[
-                        styles.timeInput,
-                        editValidationErrorMessage && styles.timeInputInvalid,
-                      ]}
-                      value={draft.endTime}
-                    />
-                  </View>
+                  <TimeSelectField
+                    accessibilityLabel="편집 시작 시간 선택"
+                    invalid={Boolean(editValidationErrorMessage)}
+                    label="시작"
+                    onChange={(startTime) => onUpdateDraft({ startTime })}
+                    options={DIARY_START_TIME_OPTIONS}
+                    value={draft.startTime}
+                  />
+                  <TimeSelectField
+                    accessibilityLabel="편집 종료 시간 선택"
+                    invalid={Boolean(editValidationErrorMessage)}
+                    label="종료"
+                    onChange={(endTime) => onUpdateDraft({ endTime })}
+                    options={DIARY_END_TIME_OPTIONS}
+                    value={draft.endTime}
+                  />
                 </View>
 
                 <View style={styles.editFieldGroup}>
@@ -338,10 +326,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
-  timeInputGroup: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
   timeInputLabel: {
     color: theme.color.textMuted,
     fontSize: theme.typography.caption,
@@ -358,9 +342,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: '500',
     paddingHorizontal: 0,
-  },
-  timeInputInvalid: {
-    borderColor: theme.color.danger,
   },
   categoryButtonList: {
     flexDirection: 'row',

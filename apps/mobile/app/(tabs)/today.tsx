@@ -1,12 +1,19 @@
 import {
   addDaysToDate,
   buildWeekGrid,
+  createDisplayTimeEntry,
   createWeekGridTimeRangeSelection,
+  DEFAULT_APP_SETTINGS,
+  formatDiaryTimeLabel,
   getWeekStartDate,
+  parseDiaryTimeToMinutes,
+  validateDiaryTimeRange,
   WEEK_GRID_SLOT_MINUTES,
+  type AppSettings,
   type Category,
   type DateString,
   type PhotoReference,
+  type TimeString,
   type TimeEntry,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
@@ -41,7 +48,7 @@ import { TodayStatusBanners } from '@/components/TodayStatusBanners';
 import { TodayTimeBlockGrid, type TodayHourRow } from '@/components/TodayTimeBlockGrid';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
-import { getMobileSettings } from '@/lib/supabase/settings';
+import { ensureMobileDefaultSettings, getMobileSettings } from '@/lib/supabase/settings';
 import {
   createMobileTimeEntry,
   deleteMobileTimeEntry,
@@ -61,6 +68,7 @@ import {
   type WeekGridSlotBounds,
   type WeekGridSlotPoint,
 } from '@/todayGridSelection';
+import { formatTodayGridDateDividerLabel, formatTodayGridHourLabel } from '@/todayGridLabels';
 import {
   createTimeRangeSelectionFromSlot,
   createTimeRangeSelectionFromTimes,
@@ -91,6 +99,17 @@ const LONG_PRESS_SELECTION_DELAY_MS = 300;
 const LONG_PRESS_MOVE_TOLERANCE = 8;
 const EDGE_AUTO_SCROLL_THRESHOLD = 80;
 const EDGE_AUTO_SCROLL_MAX_STEP = 12;
+type VisibleGridSettings = Pick<
+  AppSettings,
+  'visibleStartTime' | 'visibleEndTime' | 'useFullDayView'
+>;
+
+const DEFAULT_VISIBLE_GRID_SETTINGS: VisibleGridSettings = {
+  visibleStartTime: DEFAULT_APP_SETTINGS.visibleStartTime,
+  visibleEndTime: DEFAULT_APP_SETTINGS.visibleEndTime,
+  useFullDayView: DEFAULT_APP_SETTINGS.useFullDayView,
+};
+
 export default function TodayScreen() {
   const searchParams = useLocalSearchParams();
   const router = useRouter();
@@ -125,11 +144,23 @@ export default function TodayScreen() {
   const [datePickerMode, setDatePickerMode] = useState<DatePickerMode>(null);
   const [visibleCalendarMonthDate, setVisibleCalendarMonthDate] =
     useState<DateString>(requestedDate);
+  const [visibleGridSettings, setVisibleGridSettings] = useState<VisibleGridSettings>(
+    DEFAULT_VISIBLE_GRID_SETTINGS,
+  );
   const selectedDayGrid = useMemo(() => {
-    const weekGrid = buildWeekGrid({ weekStartDate: getWeekStartDate(selectedDate, 'monday') });
+    const weekGrid = buildWeekGrid({
+      weekStartDate: getWeekStartDate(selectedDate, 'monday'),
+      visibleStartTime: visibleGridSettings.visibleStartTime,
+      visibleEndTime: visibleGridSettings.visibleEndTime,
+      useFullDayView: visibleGridSettings.useFullDayView,
+    });
     return weekGrid.days.find((day) => day.date === selectedDate) ?? weekGrid.days[0];
-  }, [selectedDate]);
+  }, [selectedDate, visibleGridSettings]);
   const blocks = selectedDayGrid?.blocks ?? [];
+  const visibleGridRange = useMemo(
+    () => getEffectiveVisibleGridRange(visibleGridSettings),
+    [visibleGridSettings],
+  );
   const hourlyRows = useMemo(() => createHourlyRows(blocks), [blocks]);
   const [selectionDraft, setSelectionDraft] = useState<SelectionDraft | null>(null);
   const [confirmedSelection, setConfirmedSelection] = useState<WeekGridTimeRangeSelection | null>(
@@ -139,6 +170,7 @@ export default function TodayScreen() {
   const [timeInputEnd, setTimeInputEnd] = useState('');
   const [timeInputError, setTimeInputError] = useState<string | null>(null);
   const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
+  const [gridEntries, setGridEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
   const [dayPhotos, setDayPhotos] = useState<DatePhotoAsset[]>([]);
@@ -203,9 +235,8 @@ export default function TodayScreen() {
   const canApplySelectedRange =
     confirmedSelection !== null && timeInputError === null && entrySaveState !== 'saving';
   const editValidationErrorMessage = useMemo(
-    () =>
-      editingEntryDraft ? getEntryEditValidationError(blocks, editingEntryDraft, categories) : null,
-    [blocks, categories, editingEntryDraft],
+    () => (editingEntryDraft ? getEntryEditValidationError(editingEntryDraft, categories) : null),
+    [categories, editingEntryDraft],
   );
   const canSaveEditedEntry =
     editingEntryDraft !== null &&
@@ -285,6 +316,10 @@ export default function TodayScreen() {
   }, [selectedDate]);
 
   useEffect(() => {
+    clearConfirmedSelection();
+  }, [visibleGridSettings]);
+
+  useEffect(() => {
     if (!datePickerMode) {
       datePickerRevealValue.setValue(0);
       return;
@@ -349,6 +384,33 @@ export default function TodayScreen() {
     };
   }, [selectedDate]);
 
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+
+    if (!envStatus.isConfigured) {
+      setGridEntries([]);
+      return;
+    }
+
+    let isActive = true;
+
+    void loadSelectedDateGridEntries(selectedDate, visibleGridRange)
+      .then((nextEntries) => {
+        if (isActive) {
+          setGridEntries(nextEntries);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setGridEntries([]);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDate, visibleGridRange]);
+
   useFocusEffect(
     useCallback(() => {
       const envStatus = getMobileSupabaseEnvStatus();
@@ -359,10 +421,18 @@ export default function TodayScreen() {
 
       let isActive = true;
 
-      void listMobileCategories({ includeArchived: true })
-        .then((nextCategories) => {
+      void Promise.all([
+        listMobileCategories({ includeArchived: true }),
+        getMobileSettings().then((settings) => settings ?? ensureMobileDefaultSettings()),
+      ])
+        .then(([nextCategories, nextSettings]) => {
           if (isActive) {
             setCategories(nextCategories);
+            setVisibleGridSettings({
+              visibleStartTime: nextSettings.visibleStartTime,
+              visibleEndTime: nextSettings.visibleEndTime,
+              useFullDayView: nextSettings.useFullDayView,
+            });
           }
         })
         .catch(() => undefined);
@@ -708,7 +778,14 @@ export default function TodayScreen() {
 
   function confirmSelectionAtSlotIndex(slotIndex: number) {
     const block = blocks[slotIndex];
-    const blockEntry = block ? getEntryCoveringBlock(block, dayEntries) : null;
+    const blockEntry = block
+      ? getEntryCoveringBlock(
+          block,
+          gridEntries,
+          visibleGridRange.visibleStartTime,
+          visibleGridRange.visibleEndTime,
+        )
+      : null;
 
     if (blockEntry) {
       openEntryEditor(blockEntry);
@@ -767,8 +844,12 @@ export default function TodayScreen() {
         categoryId,
       });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       clearConfirmedSelection();
@@ -884,8 +965,12 @@ export default function TodayScreen() {
         note: draft.note,
       });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       closeEntryEditor();
@@ -918,8 +1003,12 @@ export default function TodayScreen() {
     try {
       await deleteMobileTimeEntry({ id: entryId });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       closeEntryEditor();
@@ -1140,7 +1229,9 @@ export default function TodayScreen() {
 
       <TodayTimeBlockGrid
         hourlyRows={hourlyRows}
-        entries={dayEntries}
+        entries={gridEntries}
+        visibleStartTime={visibleGridRange.visibleStartTime}
+        visibleEndTime={visibleGridRange.visibleEndTime}
         categoryById={categoryById}
         displayedSelection={displayedSelection}
         photoReferencesByEntryId={photoReferencesByEntryId}
@@ -1173,11 +1264,12 @@ export default function TodayScreen() {
         visible={confirmedSelection !== null}
         selectedRangeLabel={
           confirmedSelection
-            ? `${confirmedSelection.startTime}-${confirmedSelection.endTime}`
+            ? `${formatDiaryTimeLabel(confirmedSelection.startTime)}-${formatDiaryTimeLabel(confirmedSelection.endTime)}`
             : null
         }
         timeInputStart={timeInputStart}
         timeInputEnd={timeInputEnd}
+        timeBlocks={blocks}
         timeInputError={timeInputError}
         categoryPaletteItems={categoryPaletteItems}
         canApplySelectedRange={canApplySelectedRange}
@@ -1230,27 +1322,74 @@ function loadSelectedDateData(date: DateString): Promise<[TimeEntry[], Category[
   ]);
 }
 
+async function loadSelectedDateGridEntries(
+  date: DateString,
+  visibleGridRange: Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'>,
+): Promise<TimeEntry[]> {
+  const selectedDateEntries = await listMobileTimeEntriesByDate(date);
+
+  if (parseDiaryTimeToMinutes(visibleGridRange.visibleEndTime) <= 24 * 60) {
+    return selectedDateEntries;
+  }
+
+  const nextDateEntries = await listMobileTimeEntriesByDate(addDaysToDate(date, 1));
+
+  return [...selectedDateEntries, ...nextDateEntries];
+}
+
 function getEntryCoveringBlock(
   block: WeekGridBlock,
   entries: readonly TimeEntry[],
+  visibleStartTime: TimeString,
+  visibleEndTime: TimeString,
 ): TimeEntry | null {
   return (
     entries.find(
-      (entry) =>
-        !entry.deletedAt && entry.startTime <= block.startTime && entry.endTime >= block.endTime,
+      (entry) => {
+        if (entry.deletedAt) {
+          return false;
+        }
+
+        const displayEntry = createDisplayTimeEntry({
+          entry,
+          visibleStartTime,
+          visibleEndTime,
+        });
+
+        return (
+          displayEntry.displayDate === block.date &&
+          displayEntry.displayStartTime <= block.startTime &&
+          displayEntry.displayEndTime >= block.endTime
+        );
+      },
     ) ?? null
   );
 }
 
+function getEffectiveVisibleGridRange(
+  settings: VisibleGridSettings,
+): Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'> {
+  if (settings.useFullDayView) {
+    return {
+      visibleStartTime: '00:00',
+      visibleEndTime: '24:00',
+    };
+  }
+
+  return {
+    visibleStartTime: settings.visibleStartTime,
+    visibleEndTime: settings.visibleEndTime,
+  };
+}
+
 function getEntryEditValidationError(
-  blocks: readonly WeekGridBlock[],
   draft: EntryEditDraft,
   categories: readonly Category[],
 ): string | null {
-  const rangeResult = createTimeRangeSelectionFromTimes(blocks, draft.startTime, draft.endTime);
+  const rangeResult = validateDiaryTimeRange(draft.startTime, draft.endTime);
 
   if (!rangeResult.isValid) {
-    return rangeResult.errorMessage;
+    return '시간은 10분 단위이며 종료 시간이 시작 시간보다 늦어야 합니다.';
   }
 
   if (!categories.some((category) => category.id === draft.categoryId && !category.deletedAt)) {
@@ -1316,7 +1455,12 @@ function createHourlyRows(blocks: readonly WeekGridBlock[]): TodayHourRow[] {
 
     if (firstBlock) {
       rows.push({
-        hourLabel: firstBlock.startTime,
+        key: firstBlock.id,
+        hourLabel: formatTodayGridHourLabel(firstBlock.startTime),
+        nextDayDividerLabel:
+          firstBlock.startMinutes === 24 * 60
+            ? formatTodayGridDateDividerLabel(addDaysToDate(firstBlock.date, 1))
+            : undefined,
         blocks: rowBlocks,
       });
     }

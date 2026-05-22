@@ -1,6 +1,6 @@
 import {
   createWeekGridTimeRangeSelection,
-  validateTimeRange,
+  validateDiaryTimeRange,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
 } from '@weekly/domain';
@@ -64,7 +64,7 @@ export function createTimeRangeSelectionFromTimes(
   startTime: string,
   endTime: string,
 ): TimeRangeSelectionInputResult {
-  const validation = validateTimeRange(startTime, endTime);
+  const validation = validateDiaryTimeRange(startTime, endTime);
 
   if (!validation.isValid) {
     return {

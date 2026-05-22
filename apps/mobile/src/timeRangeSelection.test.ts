@@ -8,6 +8,12 @@ import {
 } from './timeRangeSelection';
 
 const blocks = buildWeekGrid({ weekStartDate: '2026-05-04' }).days[0]?.blocks ?? [];
+const customVisibleBlocks =
+  buildWeekGrid({
+    weekStartDate: '2026-05-04',
+    visibleStartTime: '06:00',
+    visibleEndTime: '22:00',
+  }).days[0]?.blocks ?? [];
 
 describe('createTimeRangeSelectionFromSlot', () => {
   it('creates a 10 minute range from a tapped block', () => {
@@ -83,6 +89,20 @@ describe('createTimeRangeSelectionFromTimes', () => {
 
   it('rejects direct input outside the visible grid', () => {
     expect(createTimeRangeSelectionFromTimes(blocks, '04:00', '05:00')).toMatchObject({
+      isValid: false,
+    });
+  });
+
+  it('uses the current visible grid range for direct input validation', () => {
+    expect(createTimeRangeSelectionFromTimes(customVisibleBlocks, '06:00', '07:00')).toMatchObject({
+      isValid: true,
+      selection: {
+        startTime: '06:00',
+        endTime: '07:00',
+        blockCount: 6,
+      },
+    });
+    expect(createTimeRangeSelectionFromTimes(customVisibleBlocks, '05:00', '06:00')).toMatchObject({
       isValid: false,
     });
   });

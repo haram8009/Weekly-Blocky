@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createDatePhotoQueryRange, mapMediaLibraryAssetToDatePhotoAsset } from './datePhotoAssets';
 
 describe('date photo assets', () => {
-  it('creates a one-day local query range', () => {
+  it('creates a two-day local query range for next-day dawn matching', () => {
     const range = createDatePhotoQueryRange('2026-05-11');
 
     expect(range.createdAfter.getFullYear()).toBe(2026);
@@ -12,7 +12,7 @@ describe('date photo assets', () => {
     expect(range.createdAfter.getHours()).toBe(0);
     expect(range.createdBefore.getFullYear()).toBe(2026);
     expect(range.createdBefore.getMonth()).toBe(4);
-    expect(range.createdBefore.getDate()).toBe(12);
+    expect(range.createdBefore.getDate()).toBe(13);
     expect(range.createdBefore.getHours()).toBe(0);
   });
 

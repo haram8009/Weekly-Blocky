@@ -2,7 +2,8 @@ import {
   addDaysToDate,
   getDatesOfWeek,
   getWeekStartDate,
-  parseTimeToMinutes,
+  formatDiaryTimeLabel,
+  parseDiaryTimeToMinutes,
   type Category,
   type DateString,
   type TimeEntry,
@@ -189,7 +190,7 @@ export function createDailyEntryListItems(
 
       return {
         id: entry.id,
-        timeRangeLabel: `${entry.startTime}-${entry.endTime}`,
+        timeRangeLabel: `${formatDiaryTimeLabel(entry.startTime)}-${formatDiaryTimeLabel(entry.endTime)}`,
         categoryName: category.name,
         categoryEmoji: category.emoji,
         categoryColor: category.color,
@@ -346,7 +347,10 @@ function formatDayNumber(date: DateString): string {
 
 function getEntryDurationMinutes(entry: Pick<TimeEntry, 'startTime' | 'endTime'>): number {
   try {
-    return Math.max(parseTimeToMinutes(entry.endTime) - parseTimeToMinutes(entry.startTime), 0);
+    return Math.max(
+      parseDiaryTimeToMinutes(entry.endTime) - parseDiaryTimeToMinutes(entry.startTime),
+      0,
+    );
   } catch {
     return 0;
   }
