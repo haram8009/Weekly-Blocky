@@ -65,6 +65,70 @@ describe('week grid utilities', () => {
     });
   });
 
+  it('사용자 설정 표시 범위의 10분 블록 데이터를 생성한다', () => {
+    const grid = buildWeekGrid({
+      weekStartDate: '2026-05-04',
+      visibleStartTime: '06:00',
+      visibleEndTime: '22:00',
+    });
+
+    expect(grid.useFullDayView).toBe(false);
+    expect(grid.visibleStartTime).toBe('06:00');
+    expect(grid.visibleEndTime).toBe('22:00');
+    expect(grid.blocksPerDay).toBe(96);
+    expect(grid.totalBlockCount).toBe(672);
+    expect(grid.days[0]?.blocks[0]).toMatchObject({
+      id: '2026-05-04:06:00',
+      startTime: '06:00',
+      endTime: '06:10',
+      startMinutes: 360,
+      endMinutes: 370,
+    });
+    expect(grid.days[0]?.blocks[95]).toMatchObject({
+      startTime: '21:50',
+      endTime: '22:00',
+      startMinutes: 1310,
+      endMinutes: 1320,
+    });
+  });
+
+  it('전체 보기가 켜져 있으면 사용자 설정 표시 범위보다 전체 범위를 우선한다', () => {
+    const grid = buildWeekGrid({
+      weekStartDate: '2026-05-04',
+      useFullDayView: true,
+      visibleStartTime: '06:00',
+      visibleEndTime: '22:00',
+    });
+
+    expect(grid.visibleStartTime).toBe('00:00');
+    expect(grid.visibleEndTime).toBe('24:00');
+    expect(grid.blocksPerDay).toBe(144);
+  });
+
+  it('다음날 05:00까지의 사용자 설정 표시 범위를 생성한다', () => {
+    const grid = buildWeekGrid({
+      weekStartDate: '2026-05-04',
+      visibleStartTime: '05:00',
+      visibleEndTime: '29:00',
+    });
+
+    expect(grid.visibleStartTime).toBe('05:00');
+    expect(grid.visibleEndTime).toBe('29:00');
+    expect(grid.blocksPerDay).toBe(144);
+    expect(grid.days[0]?.blocks[113]).toMatchObject({
+      startTime: '23:50',
+      endTime: '24:00',
+      startMinutes: 1430,
+      endMinutes: 1440,
+    });
+    expect(grid.days[0]?.blocks[143]).toMatchObject({
+      startTime: '28:50',
+      endTime: '29:00',
+      startMinutes: 1730,
+      endMinutes: 1740,
+    });
+  });
+
   it('선택한 블록 범위를 10분 단위 시간 범위로 변환한다', () => {
     const grid = buildWeekGrid({ weekStartDate: '2026-05-04' });
     const blocks = grid.days[0]?.blocks ?? [];

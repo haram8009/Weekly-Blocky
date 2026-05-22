@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   addDaysToDate,
+  formatDiaryMinutesToTime,
+  formatDiaryTimeLabel,
   formatMinutesToTime,
   getDatesOfWeek,
   getWeekStartDate,
   isCapturedWithinEntry,
   isTenMinuteAligned,
+  parseDiaryTimeToMinutes,
   parseTimeToMinutes,
+  validateDiaryTimeRange,
   validateTimeRange,
 } from './time';
 
@@ -89,6 +93,38 @@ describe('time utilities', () => {
     });
   });
 
+  describe('diary time utilities', () => {
+    it('다음날 05:00까지의 일지 시간을 분으로 변환한다', () => {
+      expect(parseDiaryTimeToMinutes('24:00')).toBe(1440);
+      expect(parseDiaryTimeToMinutes('25:30')).toBe(1530);
+      expect(parseDiaryTimeToMinutes('29:00')).toBe(1740);
+      expect(() => parseDiaryTimeToMinutes('29:10')).toThrow();
+    });
+
+    it('일지 분 값을 HH:mm 문자열과 사용자 라벨로 변환한다', () => {
+      expect(formatDiaryMinutesToTime(1500)).toBe('25:00');
+      expect(formatDiaryTimeLabel('23:50')).toBe('23:50');
+      expect(formatDiaryTimeLabel('24:00')).toBe('다음날 00:00');
+      expect(formatDiaryTimeLabel('29:00')).toBe('다음날 05:00');
+    });
+
+    it('다음날 05:00까지의 일지 시간 범위를 검증한다', () => {
+      expect(validateDiaryTimeRange('05:00', '29:00')).toEqual({
+        isValid: true,
+        startMinutes: 300,
+        endMinutes: 1740,
+      });
+      expect(validateDiaryTimeRange('29:00', '29:00')).toEqual({
+        isValid: false,
+        errors: ['START_MUST_BE_BEFORE_END'],
+      });
+      expect(validateDiaryTimeRange('29:00', '29:10')).toEqual({
+        isValid: false,
+        errors: ['INVALID_END_TIME'],
+      });
+    });
+  });
+
   describe('week date helpers', () => {
     it('월요일 시작 주의 시작일과 7일 날짜를 계산한다', () => {
       expect(getWeekStartDate('2026-05-07', 'monday')).toBe('2026-05-04');
@@ -141,6 +177,23 @@ describe('time utilities', () => {
           ...entry,
           startTime: '10:00',
           endTime: '09:00',
+        }),
+      ).toBe(false);
+    });
+
+    it('다음날 새벽 기록은 일지 날짜의 다음 실제 날짜 사진과 매칭한다', () => {
+      expect(
+        isCapturedWithinEntry('2026-05-08T01:30:00', {
+          date: '2026-05-07',
+          startTime: '25:00',
+          endTime: '26:00',
+        }),
+      ).toBe(true);
+      expect(
+        isCapturedWithinEntry('2026-05-07T25:30:00', {
+          date: '2026-05-07',
+          startTime: '25:00',
+          endTime: '26:00',
         }),
       ).toBe(false);
     });

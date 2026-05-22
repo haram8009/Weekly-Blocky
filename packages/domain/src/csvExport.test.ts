@@ -58,6 +58,19 @@ describe('createTimeEntriesCsv', () => {
     ]);
   });
 
+  it('다음날 새벽까지 이어지는 일지 시간의 durationMinutes를 계산한다', () => {
+    const csv = createTimeEntriesCsv([
+      createEntry({
+        startTime: '24:00',
+        endTime: '25:00',
+      }),
+    ]);
+
+    expect(csv.slice(UTF8_BOM.length).split('\n').slice(1)).toEqual([
+      '2026-05-08,다음날 00:00,다음날 01:00,60,업무,#2563eb,💻,기획 정리,manual,0,2026-05-08T00:00:00.000Z,2026-05-08T01:00:00.000Z',
+    ]);
+  });
+
   it('쉼표, 따옴표, 줄바꿈이 있는 필드를 CSV 표준에 맞게 escape한다', () => {
     const csv = createTimeEntriesCsv([
       createEntry({

@@ -71,8 +71,8 @@ export function resolvePhotoMatches(
       continue;
     }
 
-    const matchedEntry = activeEntries.find(
-      (entry) => entry.date === photo.date && isCapturedWithinEntry(photo.capturedAt, entry),
+    const matchedEntry = activeEntries.find((entry) =>
+      isCapturedWithinEntry(photo.capturedAt, entry),
     );
 
     if (matchedEntry) {

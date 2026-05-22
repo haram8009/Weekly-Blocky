@@ -2,10 +2,16 @@ import type {
   DateString,
   EntryOverlapResolution,
   TimeEntry,
+  TimeString,
   TimestampString,
   WeekReview,
 } from '@weekly/domain';
-import { resolveEntryOverlaps, validateTimeRange } from '@weekly/domain';
+import {
+  formatDiaryMinutesToTime,
+  parseDiaryTimeToMinutes,
+  resolveEntryOverlaps,
+  validateDiaryTimeRange,
+} from '@weekly/domain';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { SupabaseStorageError } from './errors';
@@ -16,6 +22,16 @@ import type {
   UpdateTimeEntryInput,
   UpsertWeekReviewInput,
 } from './types';
+
+type MatchingEntryMerge = {
+  entry: TimeEntry;
+  nextRange: {
+    id: string;
+    date: DateString;
+    startTime: TimeString;
+    endTime: TimeString;
+  };
+};
 
 export class SupabaseTimeEntryService {
   private readonly repository: SupabaseTimeEntryRepository;
@@ -28,6 +44,22 @@ export class SupabaseTimeEntryService {
     assertValidTimeRange(input.startTime, input.endTime);
     const now = input.now ?? new Date().toISOString();
     const existingEntries = await this.repository.listTimeEntriesByDate(input.date);
+    const matchingEntryMerge = findMatchingEntryMerge(existingEntries, input);
+
+    if (matchingEntryMerge) {
+      const { entry, nextRange } = matchingEntryMerge;
+      const overlapResolution = resolveEntryOverlaps(existingEntries, nextRange);
+
+      await this.applyOverlapResolution(overlapResolution, now);
+
+      return this.repository.updateTimeEntry({
+        id: entry.id,
+        startTime: nextRange.startTime,
+        endTime: nextRange.endTime,
+        now,
+      });
+    }
+
     const overlapResolution = resolveEntryOverlaps(existingEntries, input);
 
     await this.applyOverlapResolution(overlapResolution, now);
@@ -186,7 +218,7 @@ export function upsertAndReloadWeekReview(
 }
 
 function assertValidTimeRange(startTime: string, endTime: string): void {
-  const result = validateTimeRange(startTime, endTime);
+  const result = validateDiaryTimeRange(startTime, endTime);
 
   if (!result.isValid) {
     throw new SupabaseStorageError(
@@ -195,4 +227,55 @@ function assertValidTimeRange(startTime: string, endTime: string): void {
       `Invalid time range: ${startTime}-${endTime} (${result.errors.join(', ')})`,
     );
   }
+}
+
+function findMatchingEntryMerge(
+  existingEntries: readonly TimeEntry[],
+  input: CreateTimeEntryInput,
+): MatchingEntryMerge | null {
+  const inputNote = input.note ?? '';
+  const inputSource = input.source ?? 'manual';
+  const inputStartMinutes = parseDiaryTimeToMinutes(input.startTime);
+  const inputEndMinutes = parseDiaryTimeToMinutes(input.endTime);
+  const candidates = existingEntries.filter(
+    (entry) =>
+      entry.deletedAt === null &&
+      entry.date === input.date &&
+      entry.categoryId === input.categoryId &&
+      entry.note === inputNote &&
+      entry.source === inputSource &&
+      parseDiaryTimeToMinutes(entry.startTime) <= inputEndMinutes &&
+      parseDiaryTimeToMinutes(entry.endTime) >= inputStartMinutes,
+  );
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const sortedCandidates = [...candidates].sort((first, second) =>
+    first.startTime.localeCompare(second.startTime),
+  );
+  const startMinutes = Math.min(
+    inputStartMinutes,
+    ...sortedCandidates.map((entry) => parseDiaryTimeToMinutes(entry.startTime)),
+  );
+  const endMinutes = Math.max(
+    inputEndMinutes,
+    ...sortedCandidates.map((entry) => parseDiaryTimeToMinutes(entry.endTime)),
+  );
+  const entry = sortedCandidates[0];
+
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    entry,
+    nextRange: {
+      id: entry.id,
+      date: input.date,
+      startTime: formatDiaryMinutesToTime(startMinutes),
+      endTime: formatDiaryMinutesToTime(endMinutes),
+    },
+  };
 }

@@ -1,5 +1,5 @@
 import type { Category, DateString, TimeEntry, TimeString } from './index';
-import { getDatesOfWeek, parseTimeToMinutes, validateTimeRange } from './time';
+import { getDatesOfWeek, parseDiaryTimeToMinutes, validateDiaryTimeRange } from './time';
 
 export const DEFAULT_WEEKLY_STATS_VISIBLE_START_TIME: TimeString = '00:00';
 export const DEFAULT_WEEKLY_STATS_VISIBLE_END_TIME: TimeString = '24:00';
@@ -251,7 +251,9 @@ export function createReviewChartData({
 
   const weeklyRecordedMinutes = sumValues(dailyRecordedMinutes);
   const sortedGroups = [...groupAccumulators.values()]
-    .map((group) => buildReviewChartGroup(group, weekDates, dailyRecordedMinutes, weeklyRecordedMinutes))
+    .map((group) =>
+      buildReviewChartGroup(group, weekDates, dailyRecordedMinutes, weeklyRecordedMinutes),
+    )
     .sort(
       (first, second) =>
         second.totalMinutes - first.totalMinutes || first.label.localeCompare(second.label),
@@ -303,7 +305,7 @@ function parseVisibleRange(
   startMinutes: number;
   endMinutes: number;
 } {
-  const validation = validateTimeRange(startTime, endTime);
+  const validation = validateDiaryTimeRange(startTime, endTime);
 
   if (!validation.isValid) {
     throw new Error(
@@ -325,8 +327,8 @@ function getEntryDuration(
   },
 ): EntryDuration | null {
   try {
-    const startMinutes = parseTimeToMinutes(entry.startTime);
-    const endMinutes = parseTimeToMinutes(entry.endTime);
+    const startMinutes = parseDiaryTimeToMinutes(entry.startTime);
+    const endMinutes = parseDiaryTimeToMinutes(entry.endTime);
     const totalMinutes = endMinutes - startMinutes;
 
     if (totalMinutes <= 0) {
@@ -398,7 +400,9 @@ function buildReviewChartGroup(
 ): ReviewChartGroup {
   const categoryNames = getReviewChartCategoryNames(group);
   const label =
-    categoryNames.length > 1 ? `${categoryNames[0]} 외 ${categoryNames.length - 1}개` : categoryNames[0];
+    categoryNames.length > 1
+      ? `${categoryNames[0]} 외 ${categoryNames.length - 1}개`
+      : categoryNames[0];
   const dailyPoints = buildReviewChartDailyPoints(group, weekDates, dailyRecordedMinutes);
   const peakPoint = dailyPoints.reduce<ReviewChartDailyPoint | null>(
     (currentPeak, point) =>
@@ -455,8 +459,7 @@ function buildOtherReviewChartGroup(
     label: OTHER_GROUP_LABEL,
     categoryNames: groups.flatMap((group) => group.categoryNames),
     totalMinutes,
-    ratio:
-      weeklyRecordedMinutes > 0 ? Math.round((totalMinutes / weeklyRecordedMinutes) * 100) : 0,
+    ratio: weeklyRecordedMinutes > 0 ? Math.round((totalMinutes / weeklyRecordedMinutes) * 100) : 0,
     peakDate: peakPoint && peakPoint.minutes > 0 ? peakPoint.date : null,
     peakWeekdayLabel: peakPoint && peakPoint.minutes > 0 ? peakPoint.weekdayLabel : null,
     dailyPoints,
