@@ -17,6 +17,7 @@ export type PhotoReferenceActionState = 'idle' | 'saving' | 'error';
 
 export type EntryEditDraft = {
   id: string;
+  date: string;
   startTime: string;
   endTime: string;
   categoryId: string;

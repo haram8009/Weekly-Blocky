@@ -1,11 +1,13 @@
 import {
   addDaysToDate,
+  createDisplayTimeEntry,
   getDatesOfWeek,
   getWeekStartDate,
   formatDiaryTimeLabel,
   parseDiaryTimeToMinutes,
   type Category,
   type DateString,
+  type TimeString,
   type TimeEntry,
 } from '@weekly/domain';
 
@@ -67,6 +69,10 @@ type CategoryPaletteCategoryLike = Pick<
 type TimeEntryLike = Pick<
   TimeEntry,
   'id' | 'startTime' | 'endTime' | 'categoryId' | 'note' | 'deletedAt'
+>;
+type DisplayDateTimeEntryLike = Pick<
+  TimeEntry,
+  'id' | 'date' | 'startTime' | 'endTime' | 'categoryId' | 'note' | 'deletedAt'
 >;
 type CategoryPaletteEntryLike = Pick<
   TimeEntry,
@@ -197,6 +203,56 @@ export function createDailyEntryListItems(
         durationMinutes: getEntryDurationMinutes(entry),
         note: entry.note,
       };
+    })
+    .sort((first, second) => first.timeRangeLabel.localeCompare(second.timeRangeLabel));
+}
+
+export function createDisplayDateEntryListItems(
+  entries: readonly DisplayDateTimeEntryLike[],
+  categories: readonly CategoryLike[],
+  {
+    displayDate,
+    visibleStartTime,
+    visibleEndTime,
+  }: {
+    displayDate: DateString;
+    visibleStartTime: TimeString;
+    visibleEndTime: TimeString;
+  },
+): DailyEntryListItem[] {
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
+
+  return entries
+    .flatMap((entry) => {
+      if (entry.deletedAt) {
+        return [];
+      }
+
+      const displayEntry = createDisplayTimeEntry({
+        entry,
+        visibleStartTime,
+        visibleEndTime,
+      });
+
+      if (displayEntry.displayDate !== displayDate) {
+        return [];
+      }
+
+      const category = categoryMap.get(entry.categoryId) ?? FALLBACK_CATEGORY;
+
+      return [
+        {
+          id: entry.id,
+          timeRangeLabel: `${formatDiaryTimeLabel(displayEntry.displayStartTime)}-${formatDiaryTimeLabel(displayEntry.displayEndTime)}`,
+          categoryName: category.name,
+          categoryEmoji: category.emoji,
+          categoryColor: category.color,
+          durationMinutes:
+            parseDiaryTimeToMinutes(displayEntry.displayEndTime) -
+            parseDiaryTimeToMinutes(displayEntry.displayStartTime),
+          note: entry.note,
+        },
+      ];
     })
     .sort((first, second) => first.timeRangeLabel.localeCompare(second.timeRangeLabel));
 }

@@ -4,6 +4,7 @@ import {
   createCalendarMonth,
   createCategoryPaletteItems,
   createDailyEntryListItems,
+  createDisplayDateEntryListItems,
   createDailySummary,
   createWeekCalendarRows,
   createWeekDateItems,
@@ -254,6 +255,42 @@ describe('createDailyEntryListItems', () => {
         categoryColor: '#64748B',
         durationMinutes: 30,
         note: '',
+      },
+    ]);
+  });
+});
+
+describe('createDisplayDateEntryListItems', () => {
+  it('includes next-day early-morning entries in the previous display date list', () => {
+    expect(
+      createDisplayDateEntryListItems(
+        [
+          {
+            id: 'entry-night',
+            date: '2026-05-19',
+            startTime: '00:00',
+            endTime: '02:00',
+            categoryId: 'work',
+            note: '야간 작업',
+            deletedAt: null,
+          },
+        ],
+        categories,
+        {
+          displayDate: '2026-05-18',
+          visibleStartTime: '07:00',
+          visibleEndTime: '29:00',
+        },
+      ),
+    ).toEqual([
+      {
+        id: 'entry-night',
+        timeRangeLabel: '다음날 00:00-다음날 02:00',
+        categoryName: '주요 업무',
+        categoryEmoji: '💼',
+        categoryColor: '#2563EB',
+        durationMinutes: 120,
+        note: '야간 작업',
       },
     ]);
   });

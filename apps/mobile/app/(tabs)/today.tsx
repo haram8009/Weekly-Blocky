@@ -86,7 +86,7 @@ import {
 import {
   createCalendarMonth,
   createCategoryPaletteItems,
-  createDailyEntryListItems,
+  createDisplayDateEntryListItems,
   createDailySummary,
   createWeekCalendarRows,
   resolveSelectedDate,
@@ -208,8 +208,13 @@ export default function TodayScreen() {
   );
   const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
   const dailyEntryItems = useMemo(
-    () => createDailyEntryListItems(dayEntries, categories),
-    [categories, dayEntries],
+    () =>
+      createDisplayDateEntryListItems(gridEntries, categories, {
+        displayDate: selectedDate,
+        visibleStartTime: visibleGridRange.visibleStartTime,
+        visibleEndTime: visibleGridRange.visibleEndTime,
+      }),
+    [categories, gridEntries, selectedDate, visibleGridRange],
   );
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -860,7 +865,7 @@ export default function TodayScreen() {
   }
 
   function openEntryEditorById(entryId: string) {
-    const entry = dayEntries.find((item) => item.id === entryId);
+    const entry = gridEntries.find((item) => item.id === entryId);
 
     if (entry) {
       openEntryEditor(entry);
@@ -871,6 +876,7 @@ export default function TodayScreen() {
     clearConfirmedSelection();
     setEditingEntryDraft({
       id: entry.id,
+      date: entry.date,
       startTime: entry.startTime,
       endTime: entry.endTime,
       categoryId: entry.categoryId,
@@ -958,7 +964,7 @@ export default function TodayScreen() {
     try {
       await updateMobileTimeEntry({
         id: draft.id,
-        date: selectedDate,
+        date: draft.date,
         startTime: draft.startTime,
         endTime: draft.endTime,
         categoryId: draft.categoryId,
