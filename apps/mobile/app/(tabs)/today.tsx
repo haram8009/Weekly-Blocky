@@ -1,13 +1,19 @@
 import {
   addDaysToDate,
   buildWeekGrid,
+  createDisplayTimeEntry,
   createWeekGridTimeRangeSelection,
-  EXAMPLE_CATEGORY_DEFINITIONS,
+  DEFAULT_APP_SETTINGS,
+  formatDiaryTimeLabel,
   getWeekStartDate,
+  parseDiaryTimeToMinutes,
+  validateDiaryTimeRange,
   WEEK_GRID_SLOT_MINUTES,
+  type AppSettings,
   type Category,
   type DateString,
   type PhotoReference,
+  type TimeString,
   type TimeEntry,
   type WeekGridBlock,
   type WeekGridTimeRangeSelection,
@@ -19,28 +25,30 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Image,
-  Modal,
   PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
   useWindowDimensions,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type PanResponderGestureState,
+  type ScrollView,
+  type View,
 } from 'react-native';
 
 import { useMobileAuth } from '@/auth/MobileAuthProvider';
+import { EntryEditorDrawer } from '@/components/EntryEditorDrawer';
+import { TimeRangeCategoryDrawer } from '@/components/TimeRangeCategoryDrawer';
+import { TodayDailySummary } from '@/components/TodayDailySummary';
 import { Screen } from '@/components/Screen';
+import { TodayDateNavigator, type DatePickerMode } from '@/components/TodayDateNavigator';
+import { TodayEntryList } from '@/components/TodayEntryList';
+import { TodayHeader } from '@/components/TodayHeader';
+import { TodayStatusBanners } from '@/components/TodayStatusBanners';
+import { TodayTimeBlockGrid, type TodayHourRow } from '@/components/TodayTimeBlockGrid';
 import { getMobileSupabaseEnvStatus } from '@/lib/supabase/env';
 import { listMobileCategories } from '@/lib/supabase/categories';
-import { getMobileSettings } from '@/lib/supabase/settings';
+import { ensureMobileDefaultSettings, getMobileSettings } from '@/lib/supabase/settings';
 import {
   createMobileTimeEntry,
   deleteMobileTimeEntry,
@@ -60,18 +68,28 @@ import {
   type WeekGridSlotBounds,
   type WeekGridSlotPoint,
 } from '@/todayGridSelection';
+import { formatTodayGridDateDividerLabel, formatTodayGridHourLabel } from '@/todayGridLabels';
 import {
   createTimeRangeSelectionFromSlot,
   createTimeRangeSelectionFromTimes,
   expandTimeRangeSelection,
 } from '@/timeRangeSelection';
 import {
+  type DayEntriesLoadState,
+  type DayPhotosLoadState,
+  type EntryEditDraft,
+  type EntryEditSaveState,
+  type EntrySaveState,
+  type PhotoReferenceActionState,
+  type SelectionDraft,
+} from '@/todayScreenTypes';
+import {
+  createCalendarMonth,
   createCategoryPaletteItems,
-  createDailyEntryListItems,
+  createDisplayDateEntryListItems,
   createDailySummary,
-  formatDuration,
+  createWeekCalendarRows,
   resolveSelectedDate,
-  type DailyEntryListItem,
 } from '@/todayViewModel';
 
 const BLOCKS_PER_HOUR = 6;
@@ -81,25 +99,15 @@ const LONG_PRESS_SELECTION_DELAY_MS = 300;
 const LONG_PRESS_MOVE_TOLERANCE = 8;
 const EDGE_AUTO_SCROLL_THRESHOLD = 80;
 const EDGE_AUTO_SCROLL_MAX_STEP = 12;
-const MAX_ENTRY_THUMBNAILS = 3;
+type VisibleGridSettings = Pick<
+  AppSettings,
+  'visibleStartTime' | 'visibleEndTime' | 'useFullDayView'
+>;
 
-type SelectionDraft = {
-  anchorSlotIndex: number;
-  focusSlotIndex: number;
-};
-
-type DayEntriesLoadState = 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
-type DayPhotosLoadState = 'idle' | 'loading' | 'ready' | 'disabled' | 'permission-denied' | 'error';
-type EntrySaveState = 'idle' | 'saving' | 'error';
-type EntryEditSaveState = 'idle' | 'saving' | 'deleting' | 'error';
-type PhotoReferenceActionState = 'idle' | 'saving' | 'error';
-
-type EntryEditDraft = {
-  id: string;
-  startTime: string;
-  endTime: string;
-  categoryId: string;
-  note: string;
+const DEFAULT_VISIBLE_GRID_SETTINGS: VisibleGridSettings = {
+  visibleStartTime: DEFAULT_APP_SETTINGS.visibleStartTime,
+  visibleEndTime: DEFAULT_APP_SETTINGS.visibleEndTime,
+  useFullDayView: DEFAULT_APP_SETTINGS.useFullDayView,
 };
 
 export default function TodayScreen() {
@@ -125,17 +133,34 @@ export default function TodayScreen() {
   const autoScrollStepRef = useRef(0);
   const scrollOffsetYRef = useRef(0);
   const selectionPulseValue = useRef(new Animated.Value(0)).current;
+  const datePickerRevealValue = useRef(new Animated.Value(0)).current;
   const todayDate = getLocalDateString();
   const requestedDate = useMemo(
     () => resolveSelectedDate(searchParams.date, todayDate),
     [searchParams.date, todayDate],
   );
   const [selectedDate, setSelectedDate] = useState<DateString>(requestedDate);
+  const selectedDateRef = useRef<DateString>(requestedDate);
+  const [datePickerMode, setDatePickerMode] = useState<DatePickerMode>(null);
+  const [visibleCalendarMonthDate, setVisibleCalendarMonthDate] =
+    useState<DateString>(requestedDate);
+  const [visibleGridSettings, setVisibleGridSettings] = useState<VisibleGridSettings>(
+    DEFAULT_VISIBLE_GRID_SETTINGS,
+  );
   const selectedDayGrid = useMemo(() => {
-    const weekGrid = buildWeekGrid({ weekStartDate: getWeekStartDate(selectedDate, 'monday') });
+    const weekGrid = buildWeekGrid({
+      weekStartDate: getWeekStartDate(selectedDate, 'monday'),
+      visibleStartTime: visibleGridSettings.visibleStartTime,
+      visibleEndTime: visibleGridSettings.visibleEndTime,
+      useFullDayView: visibleGridSettings.useFullDayView,
+    });
     return weekGrid.days.find((day) => day.date === selectedDate) ?? weekGrid.days[0];
-  }, [selectedDate]);
+  }, [selectedDate, visibleGridSettings]);
   const blocks = selectedDayGrid?.blocks ?? [];
+  const visibleGridRange = useMemo(
+    () => getEffectiveVisibleGridRange(visibleGridSettings),
+    [visibleGridSettings],
+  );
   const hourlyRows = useMemo(() => createHourlyRows(blocks), [blocks]);
   const [selectionDraft, setSelectionDraft] = useState<SelectionDraft | null>(null);
   const [confirmedSelection, setConfirmedSelection] = useState<WeekGridTimeRangeSelection | null>(
@@ -145,6 +170,7 @@ export default function TodayScreen() {
   const [timeInputEnd, setTimeInputEnd] = useState('');
   const [timeInputError, setTimeInputError] = useState<string | null>(null);
   const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
+  const [gridEntries, setGridEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dayEntriesLoadState, setDayEntriesLoadState] = useState<DayEntriesLoadState>('idle');
   const [dayPhotos, setDayPhotos] = useState<DatePhotoAsset[]>([]);
@@ -167,10 +193,28 @@ export default function TodayScreen() {
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const isTodaySelected = selectedDate === todayDate;
+  const calendarMonth = useMemo(
+    () =>
+      createCalendarMonth({
+        visibleMonthDate: visibleCalendarMonthDate,
+        selectedDate,
+        todayDate,
+      }),
+    [selectedDate, todayDate, visibleCalendarMonthDate],
+  );
+  const weekCalendarRows = useMemo(
+    () => createWeekCalendarRows({ selectedDate, todayDate }),
+    [selectedDate, todayDate],
+  );
   const visibleMinutes = blocks.length * WEEK_GRID_SLOT_MINUTES;
   const dailyEntryItems = useMemo(
-    () => createDailyEntryListItems(dayEntries, categories),
-    [categories, dayEntries],
+    () =>
+      createDisplayDateEntryListItems(gridEntries, categories, {
+        displayDate: selectedDate,
+        visibleStartTime: visibleGridRange.visibleStartTime,
+        visibleEndTime: visibleGridRange.visibleEndTime,
+      }),
+    [categories, gridEntries, selectedDate, visibleGridRange],
   );
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -196,9 +240,8 @@ export default function TodayScreen() {
   const canApplySelectedRange =
     confirmedSelection !== null && timeInputError === null && entrySaveState !== 'saving';
   const editValidationErrorMessage = useMemo(
-    () =>
-      editingEntryDraft ? getEntryEditValidationError(blocks, editingEntryDraft, categories) : null,
-    [blocks, categories, editingEntryDraft],
+    () => (editingEntryDraft ? getEntryEditValidationError(editingEntryDraft, categories) : null),
+    [categories, editingEntryDraft],
   );
   const canSaveEditedEntry =
     editingEntryDraft !== null &&
@@ -255,7 +298,9 @@ export default function TodayScreen() {
   );
 
   useEffect(() => {
+    selectedDateRef.current = requestedDate;
     setSelectedDate(requestedDate);
+    setVisibleCalendarMonthDate(requestedDate);
   }, [requestedDate]);
 
   useEffect(() => {
@@ -274,6 +319,24 @@ export default function TodayScreen() {
     selectionDraftRef.current = null;
     setSelectionDraft(null);
   }, [selectedDate]);
+
+  useEffect(() => {
+    clearConfirmedSelection();
+  }, [visibleGridSettings]);
+
+  useEffect(() => {
+    if (!datePickerMode) {
+      datePickerRevealValue.setValue(0);
+      return;
+    }
+
+    datePickerRevealValue.setValue(0);
+    Animated.timing(datePickerRevealValue, {
+      duration: 220,
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [datePickerMode, datePickerRevealValue]);
 
   useEffect(() => {
     if (!confirmedSelection) {
@@ -326,6 +389,33 @@ export default function TodayScreen() {
     };
   }, [selectedDate]);
 
+  useEffect(() => {
+    const envStatus = getMobileSupabaseEnvStatus();
+
+    if (!envStatus.isConfigured) {
+      setGridEntries([]);
+      return;
+    }
+
+    let isActive = true;
+
+    void loadSelectedDateGridEntries(selectedDate, visibleGridRange)
+      .then((nextEntries) => {
+        if (isActive) {
+          setGridEntries(nextEntries);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setGridEntries([]);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDate, visibleGridRange]);
+
   useFocusEffect(
     useCallback(() => {
       const envStatus = getMobileSupabaseEnvStatus();
@@ -336,10 +426,18 @@ export default function TodayScreen() {
 
       let isActive = true;
 
-      void listMobileCategories({ includeArchived: true })
-        .then((nextCategories) => {
+      void Promise.all([
+        listMobileCategories({ includeArchived: true }),
+        getMobileSettings().then((settings) => settings ?? ensureMobileDefaultSettings()),
+      ])
+        .then(([nextCategories, nextSettings]) => {
           if (isActive) {
             setCategories(nextCategories);
+            setVisibleGridSettings({
+              visibleStartTime: nextSettings.visibleStartTime,
+              visibleEndTime: nextSettings.visibleEndTime,
+              useFullDayView: nextSettings.useFullDayView,
+            });
           }
         })
         .catch(() => undefined);
@@ -421,8 +519,9 @@ export default function TodayScreen() {
       clearLongPressTimer();
       stopAutoScroll();
       selectionPulseValue.stopAnimation();
+      datePickerRevealValue.stopAnimation();
     },
-    [selectionPulseValue],
+    [datePickerRevealValue, selectionPulseValue],
   );
 
   useEffect(() => {
@@ -478,18 +577,33 @@ export default function TodayScreen() {
     user,
   ]);
 
+  function selectDate(nextDate: DateString) {
+    selectedDateRef.current = nextDate;
+    router.setParams({ date: nextDate });
+    setSelectedDate(nextDate);
+    setVisibleCalendarMonthDate(nextDate);
+    setDatePickerMode(null);
+  }
+
   function moveSelectedDate(days: number) {
-    setSelectedDate((currentDate) => {
-      const nextDate = addDaysToDate(currentDate, days);
-      router.setParams({ date: nextDate });
-      return nextDate;
-    });
+    selectDate(addDaysToDate(selectedDateRef.current, days));
   }
 
   function moveToToday() {
-    const nextDate = getLocalDateString();
-    router.setParams({ date: nextDate });
-    setSelectedDate(nextDate);
+    selectDate(getLocalDateString());
+  }
+
+  function openDatePicker(mode: Exclude<DatePickerMode, null>) {
+    setVisibleCalendarMonthDate(selectedDate);
+    setDatePickerMode(mode);
+  }
+
+  function closeDatePicker() {
+    setDatePickerMode(null);
+  }
+
+  function movePickerMonth(months: number) {
+    setVisibleCalendarMonthDate((currentDate) => addMonthsToDate(currentDate, months));
   }
 
   function handleBlockGridLayout(event: LayoutChangeEvent) {
@@ -669,7 +783,14 @@ export default function TodayScreen() {
 
   function confirmSelectionAtSlotIndex(slotIndex: number) {
     const block = blocks[slotIndex];
-    const blockEntry = block ? getEntryCoveringBlock(block, dayEntries) : null;
+    const blockEntry = block
+      ? getEntryCoveringBlock(
+          block,
+          gridEntries,
+          visibleGridRange.visibleStartTime,
+          visibleGridRange.visibleEndTime,
+        )
+      : null;
 
     if (blockEntry) {
       openEntryEditor(blockEntry);
@@ -728,8 +849,12 @@ export default function TodayScreen() {
         categoryId,
       });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       clearConfirmedSelection();
@@ -740,7 +865,7 @@ export default function TodayScreen() {
   }
 
   function openEntryEditorById(entryId: string) {
-    const entry = dayEntries.find((item) => item.id === entryId);
+    const entry = gridEntries.find((item) => item.id === entryId);
 
     if (entry) {
       openEntryEditor(entry);
@@ -751,6 +876,7 @@ export default function TodayScreen() {
     clearConfirmedSelection();
     setEditingEntryDraft({
       id: entry.id,
+      date: entry.date,
       startTime: entry.startTime,
       endTime: entry.endTime,
       categoryId: entry.categoryId,
@@ -838,15 +964,19 @@ export default function TodayScreen() {
     try {
       await updateMobileTimeEntry({
         id: draft.id,
-        date: selectedDate,
+        date: draft.date,
         startTime: draft.startTime,
         endTime: draft.endTime,
         categoryId: draft.categoryId,
         note: draft.note,
       });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       closeEntryEditor();
@@ -879,8 +1009,12 @@ export default function TodayScreen() {
     try {
       await deleteMobileTimeEntry({ id: entryId });
 
-      const [nextEntries, nextCategories] = await loadSelectedDateData(selectedDate);
+      const [[nextEntries, nextCategories], nextGridEntries] = await Promise.all([
+        loadSelectedDateData(selectedDate),
+        loadSelectedDateGridEntries(selectedDate, visibleGridRange),
+      ]);
       setDayEntries(nextEntries);
+      setGridEntries(nextGridEntries);
       setCategories(nextCategories);
       setDayEntriesLoadState('ready');
       closeEntryEditor();
@@ -1070,578 +1204,119 @@ export default function TodayScreen() {
       scrollEventThrottle={16}
       scrollViewRef={scrollViewRef}
     >
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <View style={styles.headerTitleCopy}>
-            <Text style={styles.eyebrow}>{isTodaySelected ? '오늘' : '선택 날짜'}</Text>
-            <Text style={styles.title}>{formatMonthDay(selectedDate)} 기록</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="카테고리 관리 열기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => router.push('/categories')}
-            style={({ pressed }) => [styles.headerMenuButton, pressed && styles.dateButtonPressed]}
-          >
-            <Text style={styles.headerMenuButtonText}>...</Text>
-          </Pressable>
-        </View>
-      </View>
+      <TodayHeader
+        selectedDate={selectedDate}
+        isTodaySelected={isTodaySelected}
+        onOpenCategories={() => router.push('/categories')}
+      />
 
-      <View style={styles.dateNavigator}>
-        <Pressable
-          accessibilityLabel="이전 날로 이동"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => moveSelectedDate(-1)}
-          style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
-        >
-          <Text style={styles.dateButtonText}>{'‹'}</Text>
-        </Pressable>
+      <TodayDateNavigator
+        selectedDate={selectedDate}
+        isTodaySelected={isTodaySelected}
+        mode={datePickerMode}
+        revealValue={datePickerRevealValue}
+        calendarMonth={calendarMonth}
+        weekCalendarRows={weekCalendarRows}
+        onMoveSelectedDate={moveSelectedDate}
+        onMoveToToday={moveToToday}
+        onOpenDatePicker={openDatePicker}
+        onCloseDatePicker={closeDatePicker}
+        onMovePickerMonth={movePickerMonth}
+        onSelectDate={selectDate}
+      />
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={isTodaySelected}
-          onPress={moveToToday}
-          style={({ pressed }) => [
-            styles.todayDateButton,
-            isTodaySelected && styles.todayDateButtonDisabled,
-            pressed && !isTodaySelected && styles.todayDateButtonPressed,
-          ]}
-        >
-          <Text
-            style={[
-              styles.todayDateButtonText,
-              isTodaySelected && styles.todayDateButtonTextDisabled,
-            ]}
-          >
-            오늘
-          </Text>
-        </Pressable>
+      <TodayStatusBanners
+        dayEntriesLoadState={dayEntriesLoadState}
+        dayPhotosLoadState={dayPhotosLoadState}
+        dayPhotosPermissionScope={dayPhotosPermissionScope}
+        dayPhotosErrorMessage={dayPhotosErrorMessage}
+        thumbnailSyncErrorMessage={thumbnailSyncErrorMessage}
+      />
 
-        <Pressable
-          accessibilityLabel="다음 날로 이동"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => moveSelectedDate(1)}
-          style={({ pressed }) => [styles.dateButton, pressed && styles.dateButtonPressed]}
-        >
-          <Text style={styles.dateButtonText}>{'›'}</Text>
-        </Pressable>
-      </View>
+      <TodayTimeBlockGrid
+        hourlyRows={hourlyRows}
+        entries={gridEntries}
+        visibleStartTime={visibleGridRange.visibleStartTime}
+        visibleEndTime={visibleGridRange.visibleEndTime}
+        categoryById={categoryById}
+        displayedSelection={displayedSelection}
+        photoReferencesByEntryId={photoReferencesByEntryId}
+        selectedBlockPulseStyle={selectedBlockPulseStyle}
+        blockMatrixRef={blockMatrixRef}
+        tappedSlotIndexRef={tappedSlotIndexRef}
+        panHandlers={panResponder.panHandlers}
+        onLayout={handleBlockGridLayout}
+        onTouchCancel={handleSelectionCancel}
+        onTouchEnd={handleBlockGridTouchEnd}
+        onTouchMove={handleBlockGridTouchMove}
+        onTouchStart={handleBlockGridTouchStart}
+      />
 
-      {renderDayStateBanner(dayEntriesLoadState)}
-      {renderDayPhotoStateBanner(
-        dayPhotosLoadState,
-        dayPhotosPermissionScope,
-        dayPhotosErrorMessage,
-      )}
-      {renderThumbnailSyncStateBanner(thumbnailSyncErrorMessage)}
+      <TodayDailySummary
+        dailySummary={dailySummary}
+        dayPhotosLoadState={dayPhotosLoadState}
+        dayPhotoCount={dayPhotos.length}
+      />
 
-      <View style={styles.dayGrid}>
-        <View style={styles.gridBody}>
-          <View style={styles.timeLabelColumn}>
-            {hourlyRows.map((row) => (
-              <Text key={row.hourLabel} style={styles.timeLabel}>
-                {row.hourLabel}
-              </Text>
-            ))}
-          </View>
-          <View
-            ref={blockMatrixRef}
-            style={styles.blockMatrix}
-            onLayout={handleBlockGridLayout}
-            onTouchCancel={handleSelectionCancel}
-            onTouchEnd={handleBlockGridTouchEnd}
-            onTouchMove={handleBlockGridTouchMove}
-            onTouchStart={handleBlockGridTouchStart}
-            {...panResponder.panHandlers}
-          >
-            {hourlyRows.map((row) => (
-              <View key={row.hourLabel} style={styles.hourBlocks}>
-                {row.blocks.map((block) => {
-                  const blockEntry = getEntryCoveringBlock(block, dayEntries);
-                  const blockCategory = blockEntry ? categoryById.get(blockEntry.categoryId) : null;
-                  const isSelected = isBlockSelected(block.slotIndex, displayedSelection);
-                  const blockPhotoReferences =
-                    blockEntry && block.startTime === blockEntry.startTime
-                      ? (photoReferencesByEntryId.get(blockEntry.id) ?? [])
-                      : [];
+      <TodayEntryList
+        state={dayEntriesLoadState}
+        items={dailyEntryItems}
+        entryCount={dailySummary.entryCount}
+        photoReferencesByEntryId={photoReferencesByEntryId}
+        onEntryPress={openEntryEditorById}
+      />
 
-                  return (
-                    <View
-                      key={block.id}
-                      onTouchStart={() => {
-                        tappedSlotIndexRef.current = block.slotIndex;
-                      }}
-                      style={styles.blockContainer}
-                    >
-                      <Animated.View
-                        style={[
-                          styles.emptyBlock,
-                          blockCategory && {
-                            backgroundColor: blockCategory.color,
-                            borderColor: blockCategory.color,
-                          },
-                          isSelected && styles.selectedBlock,
-                          isSelected && selectedBlockPulseStyle,
-                        ]}
-                      >
-                        {renderBlockPhotoIndicator(blockPhotoReferences)}
-                      </Animated.View>
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.dailySummary}>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>완성률</Text>
-          <Text style={styles.summaryMetricValue}>{dailySummary.completionRate}%</Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>기록</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDuration(dailySummary.recordedMinutes)}
-          </Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>미기록</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDuration(dailySummary.unrecordedMinutes)}
-          </Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>최다</Text>
-          <Text style={styles.summaryMetricValue}>{dailySummary.topCategoryLabel ?? '없음'}</Text>
-        </View>
-        <View style={styles.summaryMetric}>
-          <Text style={styles.summaryMetricLabel}>사진</Text>
-          <Text style={styles.summaryMetricValue}>
-            {formatDayPhotoSummary(dayPhotosLoadState, dayPhotos.length)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.entryListSection}>
-        <View style={styles.entryListHeader}>
-          <Text style={styles.entryListTitle}>세션 목록</Text>
-          <Text style={styles.entryListCount}>{dailySummary.entryCount}개</Text>
-        </View>
-
-        {renderEntryListContent(
-          dayEntriesLoadState,
-          dailyEntryItems,
-          photoReferencesByEntryId,
-          openEntryEditorById,
-        )}
-      </View>
-
-      <Modal
-        animationType="slide"
-        onRequestClose={clearConfirmedSelection}
-        transparent
+      <TimeRangeCategoryDrawer
         visible={confirmedSelection !== null}
-      >
-        <View style={styles.drawerOverlay}>
-          <Pressable style={styles.drawerBackdrop} onPress={clearConfirmedSelection} />
-          <View style={styles.categoryDrawer}>
-            <ScrollView
-              contentContainerStyle={styles.categoryDrawerContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.drawerHandle} />
-              <View style={styles.categoryPaletteHeader}>
-                <View>
-                  <Text style={styles.categoryPaletteTitle}>카테고리</Text>
-                  {confirmedSelection ? (
-                    <Text style={styles.categoryPaletteRange}>
-                      {confirmedSelection.startTime}-{confirmedSelection.endTime}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
+        selectedRangeLabel={
+          confirmedSelection
+            ? `${formatDiaryTimeLabel(confirmedSelection.startTime)}-${formatDiaryTimeLabel(confirmedSelection.endTime)}`
+            : null
+        }
+        timeInputStart={timeInputStart}
+        timeInputEnd={timeInputEnd}
+        timeBlocks={blocks}
+        timeInputError={timeInputError}
+        categoryPaletteItems={categoryPaletteItems}
+        canApplySelectedRange={canApplySelectedRange}
+        canMoveSelectionStartEarlier={canMoveSelectionStartEarlier}
+        canMoveSelectionStartLater={canMoveSelectionStartLater}
+        canMoveSelectionEndEarlier={canMoveSelectionEndEarlier}
+        canMoveSelectionEndLater={canMoveSelectionEndLater}
+        entrySaveState={entrySaveState}
+        entrySaveErrorMessage={entrySaveErrorMessage}
+        onClose={clearConfirmedSelection}
+        onAdjustSelection={adjustConfirmedSelection}
+        onUpdateTimeInput={updateTimeInput}
+        onApplyCategory={applyCategoryToSelection}
+      />
 
-              <View style={styles.timeRangeEditor}>
-                <View style={styles.rangeStepperGrid}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!canMoveSelectionStartEarlier}
-                    onPress={() => adjustConfirmedSelection('start', -1)}
-                    style={({ pressed }) => [
-                      styles.rangeStepperButton,
-                      !canMoveSelectionStartEarlier && styles.rangeStepperButtonDisabled,
-                      pressed && canMoveSelectionStartEarlier && styles.rangeStepperButtonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeStepperButtonText,
-                        !canMoveSelectionStartEarlier && styles.rangeStepperButtonTextDisabled,
-                      ]}
-                    >
-                      시작 -10분
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!canMoveSelectionStartLater}
-                    onPress={() => adjustConfirmedSelection('start', 1)}
-                    style={({ pressed }) => [
-                      styles.rangeStepperButton,
-                      !canMoveSelectionStartLater && styles.rangeStepperButtonDisabled,
-                      pressed && canMoveSelectionStartLater && styles.rangeStepperButtonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeStepperButtonText,
-                        !canMoveSelectionStartLater && styles.rangeStepperButtonTextDisabled,
-                      ]}
-                    >
-                      시작 +10분
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!canMoveSelectionEndEarlier}
-                    onPress={() => adjustConfirmedSelection('end', -1)}
-                    style={({ pressed }) => [
-                      styles.rangeStepperButton,
-                      !canMoveSelectionEndEarlier && styles.rangeStepperButtonDisabled,
-                      pressed && canMoveSelectionEndEarlier && styles.rangeStepperButtonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeStepperButtonText,
-                        !canMoveSelectionEndEarlier && styles.rangeStepperButtonTextDisabled,
-                      ]}
-                    >
-                      종료 -10분
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!canMoveSelectionEndLater}
-                    onPress={() => adjustConfirmedSelection('end', 1)}
-                    style={({ pressed }) => [
-                      styles.rangeStepperButton,
-                      !canMoveSelectionEndLater && styles.rangeStepperButtonDisabled,
-                      pressed && canMoveSelectionEndLater && styles.rangeStepperButtonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeStepperButtonText,
-                        !canMoveSelectionEndLater && styles.rangeStepperButtonTextDisabled,
-                      ]}
-                    >
-                      종료 +10분
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.timeInputRow}>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>시작</Text>
-                    <TextInput
-                      accessibilityLabel="시작 시간 직접 입력"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(nextStartTime) => updateTimeInput(nextStartTime, timeInputEnd)}
-                      placeholder="HH:mm"
-                      style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                      value={timeInputStart}
-                    />
-                  </View>
-                  <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>종료</Text>
-                    <TextInput
-                      accessibilityLabel="종료 시간 직접 입력"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={5}
-                      onChangeText={(nextEndTime) => updateTimeInput(timeInputStart, nextEndTime)}
-                      placeholder="HH:mm"
-                      style={[styles.timeInput, timeInputError && styles.timeInputInvalid]}
-                      value={timeInputEnd}
-                    />
-                  </View>
-                </View>
-                {timeInputError ? (
-                  <Text style={styles.timeInputError}>{timeInputError}</Text>
-                ) : null}
-              </View>
-
-              <View style={styles.categoryButtonList}>
-                {categoryPaletteItems.length === 0 ? (
-                  <View style={styles.categoryEmptyState}>
-                    <Text style={styles.categoryEmptyTitle}>저장된 카테고리가 없습니다.</Text>
-                    <Text style={styles.categoryEmptyDescription}>
-                      예시:{' '}
-                      {EXAMPLE_CATEGORY_DEFINITIONS.slice(0, 4)
-                        .map((category) => `${category.emoji} ${category.name}`)
-                        .join(', ')}
-                    </Text>
-                  </View>
-                ) : (
-                  categoryPaletteItems.map((category) => (
-                    <Pressable
-                      key={category.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: !canApplySelectedRange }}
-                      disabled={!canApplySelectedRange}
-                      onPress={() => void applyCategoryToSelection(category.id)}
-                      style={({ pressed }) => [
-                        styles.categoryButton,
-                        {
-                          backgroundColor: category.color,
-                          borderColor: category.color,
-                        },
-                        !canApplySelectedRange && styles.categoryButtonDisabled,
-                        pressed && canApplySelectedRange && styles.categoryButtonPressed,
-                      ]}
-                    >
-                      <Text style={styles.categoryButtonText}>
-                        {category.emoji} {category.name}
-                      </Text>
-                    </Pressable>
-                  ))
-                )}
-              </View>
-              {entrySaveState === 'saving' ? (
-                <Text style={styles.categorySaveStatus}>기록을 저장하고 있습니다.</Text>
-              ) : null}
-              {entrySaveErrorMessage ? (
-                <Text style={styles.categorySaveError}>{entrySaveErrorMessage}</Text>
-              ) : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        onRequestClose={closeEntryEditor}
-        transparent
-        visible={editingEntryDraft !== null}
-      >
-        <View style={styles.drawerOverlay}>
-          <Pressable style={styles.drawerBackdrop} onPress={closeEntryEditor} />
-          <View style={styles.categoryDrawer}>
-            <ScrollView
-              contentContainerStyle={styles.categoryDrawerContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.drawerHandle} />
-              <View style={styles.categoryPaletteHeader}>
-                <View>
-                  <Text style={styles.categoryPaletteTitle}>기록 편집</Text>
-                  <Text style={styles.categoryPaletteRange}>{formatMonthDay(selectedDate)}</Text>
-                </View>
-              </View>
-
-              {editingEntryDraft ? (
-                <>
-                  <View style={styles.timeInputRow}>
-                    <View style={styles.timeInputGroup}>
-                      <Text style={styles.timeInputLabel}>시작</Text>
-                      <TextInput
-                        accessibilityLabel="편집 시작 시간"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="numbers-and-punctuation"
-                        maxLength={5}
-                        onChangeText={(startTime) => updateEditingEntryDraft({ startTime })}
-                        placeholder="HH:mm"
-                        style={[
-                          styles.timeInput,
-                          editValidationErrorMessage && styles.timeInputInvalid,
-                        ]}
-                        value={editingEntryDraft.startTime}
-                      />
-                    </View>
-                    <View style={styles.timeInputGroup}>
-                      <Text style={styles.timeInputLabel}>종료</Text>
-                      <TextInput
-                        accessibilityLabel="편집 종료 시간"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="numbers-and-punctuation"
-                        maxLength={5}
-                        onChangeText={(endTime) => updateEditingEntryDraft({ endTime })}
-                        placeholder="HH:mm"
-                        style={[
-                          styles.timeInput,
-                          editValidationErrorMessage && styles.timeInputInvalid,
-                        ]}
-                        value={editingEntryDraft.endTime}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.editFieldGroup}>
-                    <Text style={styles.timeInputLabel}>카테고리</Text>
-                    <View style={styles.categoryButtonList}>
-                      {categoryPaletteItems.map((category) => {
-                        const isSelected = category.id === editingEntryDraft.categoryId;
-
-                        return (
-                          <Pressable
-                            key={category.id}
-                            accessibilityRole="button"
-                            onPress={() => updateEditingEntryDraft({ categoryId: category.id })}
-                            style={({ pressed }) => [
-                              styles.categoryButton,
-                              {
-                                backgroundColor: category.color,
-                                borderColor: category.color,
-                              },
-                              isSelected && styles.categoryButtonSelected,
-                              pressed && styles.categoryButtonPressed,
-                            ]}
-                          >
-                            <Text style={styles.categoryButtonText}>
-                              {category.emoji} {category.name}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View style={styles.editFieldGroup}>
-                    <Text style={styles.timeInputLabel}>메모</Text>
-                    <TextInput
-                      accessibilityLabel="기록 메모"
-                      multiline
-                      onChangeText={(note) => updateEditingEntryDraft({ note })}
-                      placeholder="메모"
-                      style={[styles.timeInput, styles.noteInput]}
-                      value={editingEntryDraft.note}
-                    />
-                  </View>
-
-                  <View style={styles.editFieldGroup}>
-                    <Text style={styles.timeInputLabel}>사진</Text>
-                    {renderEntryPhotoReferenceList(
-                      dayPhotosLoadState,
-                      dayPhotos.length,
-                      dayPhotosPermissionScope,
-                      dayPhotosErrorMessage,
-                      editingEntryPhotoReferences,
-                      photoReferenceActionState,
-                      hideEditingPhotoReference,
-                      unlinkEditingPhotoReference,
-                    )}
-                  </View>
-
-                  {photoReferenceActionState === 'saving' ? (
-                    <Text style={styles.categorySaveStatus}>사진 상태를 저장하고 있습니다.</Text>
-                  ) : null}
-                  {photoReferenceActionErrorMessage ? (
-                    <Text style={styles.categorySaveError}>{photoReferenceActionErrorMessage}</Text>
-                  ) : null}
-
-                  {editValidationErrorMessage ? (
-                    <Text style={styles.categorySaveError}>{editValidationErrorMessage}</Text>
-                  ) : null}
-                  {editSaveErrorMessage ? (
-                    <Text style={styles.categorySaveError}>{editSaveErrorMessage}</Text>
-                  ) : null}
-                  {editSaveState === 'saving' ? (
-                    <Text style={styles.categorySaveStatus}>수정 내용을 저장하고 있습니다.</Text>
-                  ) : null}
-                  {editSaveState === 'deleting' ? (
-                    <Text style={styles.categorySaveStatus}>기록을 삭제하고 있습니다.</Text>
-                  ) : null}
-
-                  {isDeleteConfirmVisible ? (
-                    <View style={styles.deleteConfirmBox}>
-                      <Text style={styles.deleteConfirmTitle}>이 기록을 삭제할까요?</Text>
-                      <View style={styles.editActionRow}>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => setIsDeleteConfirmVisible(false)}
-                          style={({ pressed }) => [
-                            styles.secondaryActionButton,
-                            pressed && styles.secondaryActionButtonPressed,
-                          ]}
-                        >
-                          <Text style={styles.secondaryActionButtonText}>취소</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityState={{ disabled: editSaveState === 'deleting' }}
-                          disabled={editSaveState === 'deleting'}
-                          onPress={() => void deleteEditedEntry()}
-                          style={({ pressed }) => [
-                            styles.deleteConfirmButton,
-                            editSaveState === 'deleting' && styles.deleteActionButtonDisabled,
-                            pressed &&
-                              editSaveState !== 'deleting' &&
-                              styles.deleteConfirmButtonPressed,
-                          ]}
-                        >
-                          <Text style={styles.deleteConfirmButtonText}>삭제</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: !canDeleteEditedEntry }}
-                      disabled={!canDeleteEditedEntry}
-                      onPress={requestDeleteEditedEntry}
-                      style={({ pressed }) => [
-                        styles.deleteActionButton,
-                        !canDeleteEditedEntry && styles.deleteActionButtonDisabled,
-                        pressed && canDeleteEditedEntry && styles.deleteActionButtonPressed,
-                      ]}
-                    >
-                      <Text style={styles.deleteActionButtonText}>삭제</Text>
-                    </Pressable>
-                  )}
-
-                  <View style={styles.editActionRow}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={closeEntryEditor}
-                      style={({ pressed }) => [
-                        styles.secondaryActionButton,
-                        pressed && styles.secondaryActionButtonPressed,
-                      ]}
-                    >
-                      <Text style={styles.secondaryActionButtonText}>취소</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: !canSaveEditedEntry }}
-                      disabled={!canSaveEditedEntry}
-                      onPress={() => void saveEditedEntry()}
-                      style={({ pressed }) => [
-                        styles.primaryActionButton,
-                        !canSaveEditedEntry && styles.primaryActionButtonDisabled,
-                        pressed && canSaveEditedEntry && styles.primaryActionButtonPressed,
-                      ]}
-                    >
-                      <Text style={styles.primaryActionButtonText}>저장</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <EntryEditorDrawer
+        selectedDate={selectedDate}
+        draft={editingEntryDraft}
+        categoryPaletteItems={categoryPaletteItems}
+        editValidationErrorMessage={editValidationErrorMessage}
+        editSaveErrorMessage={editSaveErrorMessage}
+        editSaveState={editSaveState}
+        canSaveEditedEntry={canSaveEditedEntry}
+        canDeleteEditedEntry={canDeleteEditedEntry}
+        isDeleteConfirmVisible={isDeleteConfirmVisible}
+        dayPhotosLoadState={dayPhotosLoadState}
+        dayPhotoCount={dayPhotos.length}
+        dayPhotosPermissionScope={dayPhotosPermissionScope}
+        dayPhotosErrorMessage={dayPhotosErrorMessage}
+        editingEntryPhotoReferences={editingEntryPhotoReferences}
+        photoReferenceActionState={photoReferenceActionState}
+        photoReferenceActionErrorMessage={photoReferenceActionErrorMessage}
+        onClose={closeEntryEditor}
+        onUpdateDraft={updateEditingEntryDraft}
+        onHidePhoto={hideEditingPhotoReference}
+        onUnlinkPhoto={unlinkEditingPhotoReference}
+        onShowDeleteConfirm={requestDeleteEditedEntry}
+        onHideDeleteConfirm={() => setIsDeleteConfirmVisible(false)}
+        onDelete={deleteEditedEntry}
+        onSave={saveEditedEntry}
+      />
     </Screen>
   );
 }
@@ -1653,27 +1328,74 @@ function loadSelectedDateData(date: DateString): Promise<[TimeEntry[], Category[
   ]);
 }
 
+async function loadSelectedDateGridEntries(
+  date: DateString,
+  visibleGridRange: Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'>,
+): Promise<TimeEntry[]> {
+  const selectedDateEntries = await listMobileTimeEntriesByDate(date);
+
+  if (parseDiaryTimeToMinutes(visibleGridRange.visibleEndTime) <= 24 * 60) {
+    return selectedDateEntries;
+  }
+
+  const nextDateEntries = await listMobileTimeEntriesByDate(addDaysToDate(date, 1));
+
+  return [...selectedDateEntries, ...nextDateEntries];
+}
+
 function getEntryCoveringBlock(
   block: WeekGridBlock,
   entries: readonly TimeEntry[],
+  visibleStartTime: TimeString,
+  visibleEndTime: TimeString,
 ): TimeEntry | null {
   return (
     entries.find(
-      (entry) =>
-        !entry.deletedAt && entry.startTime <= block.startTime && entry.endTime >= block.endTime,
+      (entry) => {
+        if (entry.deletedAt) {
+          return false;
+        }
+
+        const displayEntry = createDisplayTimeEntry({
+          entry,
+          visibleStartTime,
+          visibleEndTime,
+        });
+
+        return (
+          displayEntry.displayDate === block.date &&
+          displayEntry.displayStartTime <= block.startTime &&
+          displayEntry.displayEndTime >= block.endTime
+        );
+      },
     ) ?? null
   );
 }
 
+function getEffectiveVisibleGridRange(
+  settings: VisibleGridSettings,
+): Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'> {
+  if (settings.useFullDayView) {
+    return {
+      visibleStartTime: '00:00',
+      visibleEndTime: '24:00',
+    };
+  }
+
+  return {
+    visibleStartTime: settings.visibleStartTime,
+    visibleEndTime: settings.visibleEndTime,
+  };
+}
+
 function getEntryEditValidationError(
-  blocks: readonly WeekGridBlock[],
   draft: EntryEditDraft,
   categories: readonly Category[],
 ): string | null {
-  const rangeResult = createTimeRangeSelectionFromTimes(blocks, draft.startTime, draft.endTime);
+  const rangeResult = validateDiaryTimeRange(draft.startTime, draft.endTime);
 
   if (!rangeResult.isValid) {
-    return rangeResult.errorMessage;
+    return '시간은 10분 단위이며 종료 시간이 시작 시간보다 늦어야 합니다.';
   }
 
   if (!categories.some((category) => category.id === draft.categoryId && !category.deletedAt)) {
@@ -1730,21 +1452,8 @@ function getPagePointFromGesture(
   };
 }
 
-function isBlockSelected(
-  slotIndex: number,
-  selectedRange: WeekGridTimeRangeSelection | null,
-): boolean {
-  return (
-    selectedRange !== null &&
-    slotIndex >= selectedRange.startSlotIndex &&
-    slotIndex <= selectedRange.endSlotIndex
-  );
-}
-
-function createHourlyRows(
-  blocks: WeekGridBlock[],
-): { hourLabel: string; blocks: WeekGridBlock[] }[] {
-  const rows: { hourLabel: string; blocks: WeekGridBlock[] }[] = [];
+function createHourlyRows(blocks: readonly WeekGridBlock[]): TodayHourRow[] {
+  const rows: TodayHourRow[] = [];
 
   for (let index = 0; index < blocks.length; index += BLOCKS_PER_HOUR) {
     const rowBlocks = blocks.slice(index, index + BLOCKS_PER_HOUR);
@@ -1752,301 +1461,18 @@ function createHourlyRows(
 
     if (firstBlock) {
       rows.push({
-        hourLabel: firstBlock.startTime,
+        key: firstBlock.id,
+        hourLabel: formatTodayGridHourLabel(firstBlock.startTime),
+        nextDayDividerLabel:
+          firstBlock.startMinutes === 24 * 60
+            ? formatTodayGridDateDividerLabel(addDaysToDate(firstBlock.date, 1))
+            : undefined,
         blocks: rowBlocks,
       });
     }
   }
 
   return rows;
-}
-
-function renderDayStateBanner(state: DayEntriesLoadState) {
-  if (state === 'loading' || state === 'idle') {
-    return <Text style={styles.dayStateBanner}>기록을 불러오고 있습니다.</Text>;
-  }
-
-  if (state === 'unconfigured') {
-    return <Text style={styles.dayStateBanner}>서버 연결 전이라 기록 저장을 대기합니다.</Text>;
-  }
-
-  if (state === 'error') {
-    return (
-      <Text style={[styles.dayStateBanner, styles.dayStateBannerError]}>
-        네트워크 또는 서버 오류로 기록을 불러오지 못했습니다.
-      </Text>
-    );
-  }
-
-  return null;
-}
-
-function renderDayPhotoStateBanner(
-  state: DayPhotosLoadState,
-  permissionScope: string | null,
-  errorMessage: string | null,
-) {
-  if (state === 'loading' || state === 'idle') {
-    return <Text style={styles.photoStateBanner}>사진 단서를 확인하고 있습니다.</Text>;
-  }
-
-  if (state === 'disabled') {
-    return null;
-  }
-
-  if (state === 'permission-denied') {
-    return (
-      <Text style={styles.photoStateBanner}>
-        사진 접근 권한이 없어 사진 단서를 표시하지 않습니다.
-      </Text>
-    );
-  }
-
-  if (state === 'error') {
-    return (
-      <Text style={[styles.photoStateBanner, styles.dayStateBannerError]}>
-        {errorMessage ?? '사진을 불러오지 못했습니다.'}
-      </Text>
-    );
-  }
-
-  if (permissionScope === 'limited') {
-    return null;
-  }
-
-  return null;
-}
-
-function renderThumbnailSyncStateBanner(errorMessage: string | null) {
-  if (!errorMessage) {
-    return null;
-  }
-
-  return (
-    <Text style={[styles.photoStateBanner, styles.dayStateBannerError]}>
-      썸네일 동기화 실패: {errorMessage}
-    </Text>
-  );
-}
-
-function renderEntryPhotoLookupContent(
-  state: DayPhotosLoadState,
-  photoCount: number,
-  permissionScope: string | null,
-  errorMessage: string | null,
-) {
-  if (state === 'loading' || state === 'idle') {
-    return <Text style={styles.entryPhotoStatus}>사진을 확인하고 있습니다.</Text>;
-  }
-
-  if (state === 'disabled') {
-    return <Text style={styles.entryPhotoStatus}>설정에서 사진 매칭이 꺼져 있습니다.</Text>;
-  }
-
-  if (state === 'permission-denied') {
-    return <Text style={styles.entryPhotoStatus}>사진 접근 권한이 없습니다.</Text>;
-  }
-
-  if (state === 'error') {
-    return (
-      <Text style={[styles.entryPhotoStatus, styles.entryPhotoStatusError]}>
-        {errorMessage ?? '사진을 불러오지 못했습니다.'}
-      </Text>
-    );
-  }
-
-  return (
-    <Text style={styles.entryPhotoStatus}>
-      {permissionScope === 'limited' ? '허용된 사진' : '이 날짜 사진'} {photoCount}개
-    </Text>
-  );
-}
-
-function renderEntryPhotoReferenceList(
-  state: DayPhotosLoadState,
-  photoCount: number,
-  permissionScope: string | null,
-  errorMessage: string | null,
-  references: readonly PhotoReference[],
-  actionState: PhotoReferenceActionState,
-  onHidePhoto: (photoId: string) => Promise<void>,
-  onUnlinkPhoto: (photoId: string) => Promise<void>,
-) {
-  const status = renderEntryPhotoLookupContent(state, photoCount, permissionScope, errorMessage);
-  const isActionDisabled = actionState === 'saving';
-
-  if (state !== 'ready') {
-    return status;
-  }
-
-  if (references.length === 0) {
-    return (
-      <View style={styles.entryPhotoDetailBox}>
-        {status}
-        <Text style={styles.entryPhotoEmptyText}>이 기록 시간대에 연결된 사진이 없습니다.</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.entryPhotoDetailBox}>
-      {status}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.entryPhotoDetailList}
-      >
-        {references.map((reference, index) => (
-          <View key={reference.id} style={styles.entryPhotoDetailItem}>
-            {reference.thumbnailLocalUri ? (
-              <Image
-                accessibilityLabel={`연결 사진 ${index + 1}`}
-                source={{ uri: reference.thumbnailLocalUri }}
-                style={styles.entryPhotoDetailImage}
-              />
-            ) : (
-              <View style={styles.entryPhotoDetailFallback}>
-                <Text style={styles.entryPhotoDetailFallbackText}>사진</Text>
-              </View>
-            )}
-            <Text style={styles.entryPhotoDetailTime}>
-              {formatPhotoCapturedTime(reference.capturedAt)}
-            </Text>
-            <View style={styles.entryPhotoActionRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: isActionDisabled }}
-                disabled={isActionDisabled}
-                onPress={() => void onUnlinkPhoto(reference.id)}
-                style={({ pressed }) => [
-                  styles.entryPhotoActionButton,
-                  isActionDisabled && styles.entryPhotoActionButtonDisabled,
-                  pressed && !isActionDisabled && styles.entryPhotoActionButtonPressed,
-                ]}
-              >
-                <Text style={styles.entryPhotoActionButtonText}>연결 해제</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: isActionDisabled }}
-                disabled={isActionDisabled}
-                onPress={() => void onHidePhoto(reference.id)}
-                style={({ pressed }) => [
-                  styles.entryPhotoActionButton,
-                  styles.entryPhotoHideButton,
-                  isActionDisabled && styles.entryPhotoActionButtonDisabled,
-                  pressed && !isActionDisabled && styles.entryPhotoActionButtonPressed,
-                ]}
-              >
-                <Text style={[styles.entryPhotoActionButtonText, styles.entryPhotoHideButtonText]}>
-                  숨김
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-function renderBlockPhotoIndicator(references: readonly PhotoReference[]) {
-  if (references.length === 0) {
-    return null;
-  }
-
-  return (
-    <View pointerEvents="none" style={styles.blockPhotoIndicator}>
-      <Text style={styles.blockPhotoIndicatorText}>
-        {formatCompactPhotoCount(references.length)}
-      </Text>
-    </View>
-  );
-}
-
-function renderEntryListContent(
-  state: DayEntriesLoadState,
-  items: readonly DailyEntryListItem[],
-  photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>,
-  onEntryPress: (entryId: string) => void,
-) {
-  if (state === 'loading' || state === 'idle') {
-    return <Text style={styles.entryListStatus}>기록 목록을 불러오고 있습니다.</Text>;
-  }
-
-  if (state === 'unconfigured') {
-    return (
-      <Text style={styles.entryListStatus}>서버 연결 전이라 기록 목록을 표시하지 않습니다.</Text>
-    );
-  }
-
-  if (state === 'error') {
-    return <Text style={styles.entryListStatus}>기록 목록을 불러오지 못했습니다.</Text>;
-  }
-
-  if (items.length === 0) {
-    return <Text style={styles.entryListStatus}>이 날짜에는 아직 기록이 없습니다.</Text>;
-  }
-
-  return (
-    <View style={styles.entryCardList}>
-      {items.map((item) => {
-        const references = photoReferencesByEntryId.get(item.id) ?? [];
-
-        return (
-          <Pressable
-            key={item.id}
-            accessibilityRole="button"
-            onPress={() => onEntryPress(item.id)}
-            style={({ pressed }) => [styles.entryCard, pressed && styles.entryCardPressed]}
-          >
-            <View style={[styles.entryColorBar, { backgroundColor: item.categoryColor }]} />
-            <View style={styles.entryCardBody}>
-              <View style={styles.entryCardHeader}>
-                <Text style={styles.entryTime}>{item.timeRangeLabel}</Text>
-                <Text style={styles.entryDuration}>{formatDuration(item.durationMinutes)}</Text>
-              </View>
-              <Text style={styles.entryCategory}>
-                {item.categoryEmoji} {item.categoryName}
-              </Text>
-              {item.note ? <Text style={styles.entryNote}>{item.note}</Text> : null}
-              {renderEntryPhotoPreview(references)}
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function renderEntryPhotoPreview(references: readonly PhotoReference[]) {
-  if (references.length === 0) {
-    return null;
-  }
-
-  const thumbnailReferences = references
-    .filter((reference) => reference.thumbnailLocalUri)
-    .slice(0, MAX_ENTRY_THUMBNAILS);
-  const remainingCount = references.length - thumbnailReferences.length;
-
-  return (
-    <View style={styles.entryPhotoPreviewRow}>
-      {thumbnailReferences.map((reference, index) => (
-        <Image
-          key={reference.id}
-          accessibilityLabel={`기록 사진 썸네일 ${index + 1}`}
-          source={{ uri: reference.thumbnailLocalUri ?? '' }}
-          style={styles.entryPhotoPreviewImage}
-        />
-      ))}
-      {thumbnailReferences.length === 0 ? (
-        <Text style={styles.entryPhotoCountBadge}>사진 {references.length}개</Text>
-      ) : null}
-      {remainingCount > 0 ? (
-        <Text style={styles.entryPhotoCountBadge}>+{remainingCount}</Text>
-      ) : null}
-    </View>
-  );
 }
 
 function groupVisiblePhotoReferencesByEntryId(
@@ -2075,715 +1501,11 @@ function getLocalDateString(date = new Date()): DateString {
   ].join('-');
 }
 
-function formatDayPhotoSummary(state: DayPhotosLoadState, photoCount: number): string {
-  if (state === 'loading' || state === 'idle') {
-    return '확인 중';
-  }
+function addMonthsToDate(date: DateString, months: number): DateString {
+  const [yearText, monthText] = date.split('-');
+  const parsedDate = new Date(Number(yearText), Number(monthText) - 1 + months, 1);
 
-  if (state === 'disabled') {
-    return '꺼짐';
-  }
-
-  if (state === 'permission-denied') {
-    return '권한 없음';
-  }
-
-  if (state === 'error') {
-    return '오류';
-  }
-
-  return `${photoCount}개`;
+  return [parsedDate.getFullYear(), String(parsedDate.getMonth() + 1).padStart(2, '0'), '01'].join(
+    '-',
+  ) as DateString;
 }
-
-function formatCompactPhotoCount(photoCount: number): string {
-  return photoCount > 9 ? '9+' : String(photoCount);
-}
-
-function formatPhotoCapturedTime(capturedAt: string): string {
-  const timeText = capturedAt.includes('T') ? capturedAt.split('T')[1]?.slice(0, 5) : null;
-
-  return timeText && /^\d{2}:\d{2}$/.test(timeText) ? timeText : '시간 미상';
-}
-
-function formatMonthDay(date: DateString): string {
-  const [, monthText, dayText] = date.split('-');
-
-  return `${Number(monthText)}월 ${Number(dayText)}일`;
-}
-
-const styles = StyleSheet.create({
-  header: {
-    gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.lg,
-  },
-  headerTitleCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  headerMenuButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: 'transparent',
-  },
-  headerMenuButtonText: {
-    color: theme.color.primary,
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  eyebrow: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  title: {
-    color: theme.color.text,
-    fontSize: theme.typography.title,
-    fontWeight: '700',
-  },
-  dateNavigator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
-  },
-  dateButton: {
-    width: 40,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: 'transparent',
-  },
-  dateButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  dateButtonText: {
-    color: theme.color.primary,
-    fontSize: 30,
-    fontWeight: '400',
-  },
-  todayDateButton: {
-    flex: 1,
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.md,
-  },
-  todayDateButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  todayDateButtonDisabled: {
-    backgroundColor: 'transparent',
-  },
-  todayDateButtonText: {
-    color: theme.color.primary,
-    fontSize: theme.typography.caption,
-    fontWeight: '600',
-  },
-  todayDateButtonTextDisabled: {
-    color: theme.color.textMuted,
-  },
-  dailySummary: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.color.border,
-  },
-  summaryMetric: {
-    flexBasis: '29%',
-    flexGrow: 1,
-    minHeight: 44,
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-  },
-  summaryMetricLabel: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  summaryMetricValue: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-  },
-  dayStateBanner: {
-    borderWidth: 0,
-    borderLeftWidth: 3,
-    borderColor: theme.color.border,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  dayStateBannerError: {
-    borderColor: theme.color.danger,
-    color: theme.color.danger,
-  },
-  photoStateBanner: {
-    borderWidth: 0,
-    borderLeftWidth: 3,
-    borderColor: theme.color.border,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  dayGrid: {
-    marginBottom: theme.spacing.xl,
-  },
-  gridBody: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  timeLabelColumn: {
-    gap: theme.spacing.xs,
-  },
-  timeLabel: {
-    width: 44,
-    minHeight: 30,
-    color: theme.color.textMuted,
-    fontSize: 11,
-    lineHeight: 30,
-  },
-  blockMatrix: {
-    flex: 1,
-    gap: BLOCK_ROW_GAP,
-  },
-  hourBlocks: {
-    flexDirection: 'row',
-    gap: BLOCK_COLUMN_GAP,
-  },
-  blockContainer: {
-    flex: 1,
-    minHeight: 30,
-  },
-  emptyBlock: {
-    flex: 1,
-    minHeight: 30,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: 3,
-    backgroundColor: '#F4F4F5',
-    overflow: 'hidden',
-  },
-  blockPhotoIndicator: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    minWidth: 14,
-    height: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 3,
-  },
-  blockPhotoIndicatorText: {
-    color: theme.color.text,
-    fontSize: 8,
-    fontWeight: '600',
-    lineHeight: 10,
-  },
-  selectedBlock: {
-    backgroundColor: theme.color.accent,
-    borderWidth: 1,
-    borderColor: theme.color.primary,
-  },
-  entryListSection: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  entryListHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-  },
-  entryListTitle: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-  },
-  entryListCount: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  entryListStatus: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-    paddingVertical: theme.spacing.md,
-  },
-  entryCardList: {
-    borderTopWidth: 1,
-    borderTopColor: theme.color.border,
-  },
-  entryCard: {
-    flexDirection: 'row',
-    overflow: 'hidden',
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderColor: theme.color.border,
-    backgroundColor: theme.color.surface,
-  },
-  entryCardPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  entryColorBar: {
-    width: 4,
-  },
-  entryCardBody: {
-    flex: 1,
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.md,
-    paddingLeft: theme.spacing.md,
-  },
-  entryCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-  },
-  entryTime: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-  },
-  entryDuration: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  entryCategory: {
-    color: theme.color.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  entryNote: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  entryPhotoPreviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
-  },
-  entryPhotoPreviewImage: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  entryPhotoCountBadge: {
-    minHeight: 28,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceMuted,
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-    lineHeight: 26,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  entryPhotoStatus: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-    paddingVertical: theme.spacing.sm,
-  },
-  entryPhotoStatusError: {
-    borderColor: theme.color.danger,
-    color: theme.color.danger,
-  },
-  entryPhotoDetailBox: {
-    gap: theme.spacing.sm,
-  },
-  entryPhotoEmptyText: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  entryPhotoDetailList: {
-    gap: theme.spacing.sm,
-    paddingRight: theme.spacing.md,
-  },
-  entryPhotoDetailItem: {
-    width: 112,
-    gap: theme.spacing.xs,
-  },
-  entryPhotoDetailImage: {
-    width: 112,
-    height: 112,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  entryPhotoDetailFallback: {
-    width: 112,
-    height: 112,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  entryPhotoDetailFallbackText: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  entryPhotoDetailTime: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  entryPhotoActionRow: {
-    gap: theme.spacing.xs,
-  },
-  entryPhotoActionButton: {
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.sm,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.sm,
-  },
-  entryPhotoActionButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  entryPhotoActionButtonDisabled: {
-    opacity: 0.48,
-  },
-  entryPhotoActionButtonText: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  entryPhotoHideButton: {
-    borderColor: theme.color.danger,
-  },
-  entryPhotoHideButtonText: {
-    color: theme.color.danger,
-  },
-  drawerOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  drawerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
-  },
-  categoryDrawer: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    backgroundColor: theme.color.surface,
-    maxHeight: '92%',
-  },
-  categoryDrawerContent: {
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xxl,
-  },
-  drawerHandle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: theme.color.border,
-    marginBottom: theme.spacing.sm,
-  },
-  categoryPaletteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  categoryPaletteTitle: {
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-  },
-  categoryPaletteRange: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-    marginTop: theme.spacing.xs,
-  },
-  timeRangeEditor: {
-    gap: theme.spacing.md,
-  },
-  rangeStepperGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  rangeStepperButton: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    minHeight: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceMuted,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  rangeStepperButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  rangeStepperButtonDisabled: {
-    backgroundColor: theme.color.surface,
-    opacity: 0.62,
-  },
-  rangeStepperButtonText: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  rangeStepperButtonTextDisabled: {
-    color: theme.color.textMuted,
-  },
-  timeInputRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  timeInputGroup: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  timeInputLabel: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    fontWeight: '500',
-  },
-  timeInput: {
-    minHeight: 44,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderColor: theme.color.border,
-    borderRadius: 0,
-    backgroundColor: theme.color.surface,
-    color: theme.color.text,
-    fontSize: theme.typography.body,
-    fontWeight: '500',
-    paddingHorizontal: 0,
-  },
-  timeInputInvalid: {
-    borderColor: theme.color.danger,
-  },
-  timeInputError: {
-    color: theme.color.danger,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  categoryButtonList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  categoryEmptyState: {
-    width: '100%',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.md,
-  },
-  categoryEmptyTitle: {
-    color: theme.color.text,
-    fontSize: theme.typography.caption,
-    fontWeight: '600',
-  },
-  categoryEmptyDescription: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  categoryButton: {
-    minHeight: 42,
-    minWidth: 96,
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md,
-  },
-  categoryButtonPressed: {
-    opacity: 0.82,
-  },
-  categoryButtonSelected: {
-    borderColor: theme.color.text,
-  },
-  categoryButtonDisabled: {
-    opacity: 0.42,
-  },
-  categoryButtonText: {
-    color: theme.color.surface,
-    flexShrink: 1,
-    fontSize: theme.typography.caption,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  editFieldGroup: {
-    gap: theme.spacing.sm,
-  },
-  noteInput: {
-    minHeight: 88,
-    paddingTop: theme.spacing.md,
-    textAlignVertical: 'top',
-  },
-  editActionRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  deleteActionButton: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.md,
-  },
-  deleteActionButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  deleteActionButtonDisabled: {
-    opacity: 0.42,
-  },
-  deleteActionButtonText: {
-    color: theme.color.danger,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  deleteConfirmBox: {
-    gap: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: theme.color.border,
-    paddingTop: theme.spacing.md,
-  },
-  deleteConfirmTitle: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-  },
-  deleteConfirmButton: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.danger,
-    paddingHorizontal: theme.spacing.md,
-  },
-  deleteConfirmButtonPressed: {
-    opacity: 0.84,
-  },
-  deleteConfirmButtonText: {
-    color: theme.color.surface,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  primaryActionButton: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.primary,
-    paddingHorizontal: theme.spacing.md,
-  },
-  primaryActionButtonPressed: {
-    backgroundColor: theme.color.primaryPressed,
-  },
-  primaryActionButtonDisabled: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  primaryActionButtonText: {
-    color: theme.color.surface,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  secondaryActionButton: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: theme.radius.md,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.md,
-  },
-  secondaryActionButtonPressed: {
-    backgroundColor: theme.color.surfaceMuted,
-  },
-  secondaryActionButtonText: {
-    color: theme.color.text,
-    flexShrink: 1,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  categorySaveStatus: {
-    color: theme.color.textMuted,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-  categorySaveError: {
-    color: theme.color.danger,
-    fontSize: theme.typography.caption,
-    lineHeight: 20,
-  },
-});

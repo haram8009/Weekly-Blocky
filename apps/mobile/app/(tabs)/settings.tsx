@@ -1,7 +1,8 @@
 import * as MediaLibrary from 'expo-media-library';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, StyleSheet, Switch, Text, View } from 'react-native';
-import type { AppSettings } from '@weekly/domain';
+import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { formatDiaryTimeLabel, type AppSettings } from '@weekly/domain';
 
 import { useMobileAuth } from '@/auth/MobileAuthProvider';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -21,6 +22,7 @@ type PhotoPermissionResponse = Awaited<ReturnType<typeof MediaLibrary.getPermiss
 type PhotoSettingsKey = 'photoMatchingEnabled' | 'thumbnailSyncEnabled';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { signOut, status, user } = useMobileAuth();
   const { settings } = useLocalSettings();
   const [authMessage, setAuthMessage] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export default function SettingsScreen() {
   const [photoPermission, setPhotoPermission] = useState<PhotoPermissionResponse | null>(null);
   const [photoPermissionState, setPhotoPermissionState] = useState<PhotoPermissionState>('idle');
   const [photoPermissionMessage, setPhotoPermissionMessage] = useState<string | null>(null);
-  const [savingPhotoSetting, setSavingPhotoSetting] = useState<PhotoSettingsKey | null>(null);
+  const [savingSetting, setSavingSetting] = useState<PhotoSettingsKey | null>(null);
 
   useEffect(() => {
     if (status !== 'authenticated') {
@@ -147,8 +149,8 @@ export default function SettingsScreen() {
     }
   }
 
-  async function handleUpdatePhotoSetting(changes: UpdateSettingsInput, key: PhotoSettingsKey) {
-    setSavingPhotoSetting(key);
+  async function handleUpdateServerSetting(changes: UpdateSettingsInput, key: PhotoSettingsKey) {
+    setSavingSetting(key);
     setServerSettingsMessage(null);
 
     try {
@@ -158,10 +160,10 @@ export default function SettingsScreen() {
       setServerSettingsState('ready');
     } catch (error) {
       setServerSettingsMessage(
-        error instanceof Error ? error.message : '사진 설정을 저장하지 못했습니다.',
+        error instanceof Error ? error.message : '서버 설정을 저장하지 못했습니다.',
       );
     } finally {
-      setSavingPhotoSetting(null);
+      setSavingSetting(null);
     }
   }
 
@@ -169,7 +171,8 @@ export default function SettingsScreen() {
   const photoAccessDescription = formatPhotoPermissionDescription(photoPermission);
   const photoMatchingEnabled = serverSettings?.photoMatchingEnabled ?? false;
   const thumbnailSyncEnabled = serverSettings?.thumbnailSyncEnabled ?? false;
-  const isPhotoSettingsDisabled = serverSettingsState === 'loading' || savingPhotoSetting !== null;
+  const isServerSettingsDisabled =
+    serverSettingsState === 'loading' || savingSetting !== null || !serverSettings;
 
   return (
     <Screen>
@@ -184,10 +187,6 @@ export default function SettingsScreen() {
           <Text style={styles.value}>
             {settings.weekStartDay === 'monday' ? '월요일' : '일요일'}
           </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>기본 시작 시간</Text>
-          <Text style={styles.value}>{settings.defaultDayStartTime}</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.label}>시간대</Text>
@@ -216,20 +215,17 @@ export default function SettingsScreen() {
           <Text style={styles.label}>서버 설정</Text>
           <Text style={styles.value}>{formatServerSettingsState(serverSettingsState)}</Text>
         </View>
-        <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/settings/time-range')}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
           <Text style={styles.label}>서버 표시 범위</Text>
-          <Text style={styles.value}>
-            {serverSettings
-              ? `${serverSettings.visibleStartTime}-${serverSettings.visibleEndTime}`
-              : '-'}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>전체 보기</Text>
-          <Text style={styles.value}>
-            {serverSettings ? (serverSettings.useFullDayView ? '켜짐' : '꺼짐') : '-'}
-          </Text>
-        </View>
+          <View style={styles.navigationValueGroup}>
+            <Text style={styles.value}>{formatVisibleRangeSummary(serverSettings)}</Text>
+            <Text style={styles.chevron}>{'>'}</Text>
+          </View>
+        </Pressable>
         {serverSettingsMessage ? (
           <View style={styles.accountAction}>
             <Text style={styles.errorText}>{serverSettingsMessage}</Text>
@@ -278,9 +274,9 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Switch
-              disabled={isPhotoSettingsDisabled}
+              disabled={isServerSettingsDisabled}
               onValueChange={(value) =>
-                void handleUpdatePhotoSetting(
+                void handleUpdateServerSetting(
                   { photoMatchingEnabled: value },
                   'photoMatchingEnabled',
                 )
@@ -298,9 +294,9 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Switch
-              disabled={isPhotoSettingsDisabled}
+              disabled={isServerSettingsDisabled}
               onValueChange={(value) =>
-                void handleUpdatePhotoSetting(
+                void handleUpdateServerSetting(
                   { thumbnailSyncEnabled: value },
                   'thumbnailSyncEnabled',
                 )
@@ -310,9 +306,9 @@ export default function SettingsScreen() {
               value={thumbnailSyncEnabled}
             />
           </View>
-          {savingPhotoSetting ? (
+          {savingSetting === 'photoMatchingEnabled' || savingSetting === 'thumbnailSyncEnabled' ? (
             <Text style={styles.statusText}>
-              {savingPhotoSetting === 'photoMatchingEnabled'
+              {savingSetting === 'photoMatchingEnabled'
                 ? '사진 매칭 설정 저장 중'
                 : '썸네일 동기화 설정 저장 중'}
             </Text>
@@ -337,6 +333,18 @@ function formatServerSettingsState(state: ServerSettingsState): string {
   }
 
   return '대기';
+}
+
+function formatVisibleRangeSummary(settings: AppSettings | null): string {
+  if (!settings) {
+    return '-';
+  }
+
+  if (settings.useFullDayView) {
+    return '00:00-24:00';
+  }
+
+  return `${formatDiaryTimeLabel(settings.visibleStartTime)}-${formatDiaryTimeLabel(settings.visibleEndTime)}`;
 }
 
 function formatPhotoPermissionStatus(
@@ -438,6 +446,9 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.color.border,
     paddingHorizontal: theme.spacing.lg,
   },
+  rowPressed: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
   label: {
     color: theme.color.text,
     fontSize: theme.typography.body,
@@ -458,6 +469,16 @@ const styles = StyleSheet.create({
   accountAction: {
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
+  },
+  navigationValueGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  chevron: {
+    color: theme.color.textMuted,
+    fontSize: theme.typography.body,
+    fontWeight: '600',
   },
   photoSection: {
     gap: theme.spacing.md,

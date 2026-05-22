@@ -62,6 +62,30 @@ describe('resolvePhotoMatches', () => {
     expect(result.updates).toEqual([{ photoId: 'other-date', entryId: null, matchType: 'auto' }]);
   });
 
+  it('matches next-day photos for entries stored on the previous diary date', () => {
+    const result = resolvePhotoMatches(
+      [
+        {
+          ...baseEntry,
+          startTime: '25:00',
+          endTime: '26:00',
+        },
+      ],
+      [
+        createPhoto({
+          id: 'next-day-dawn',
+          date: '2026-05-12',
+          capturedAt: '2026-05-12T01:30:00',
+        }),
+      ],
+    );
+
+    expect(result.matches).toEqual([{ entryId: 'entry-1', photoIds: ['next-day-dawn'] }]);
+    expect(result.updates).toEqual([
+      { photoId: 'next-day-dawn', entryId: 'entry-1', matchType: 'auto' },
+    ]);
+  });
+
   it('re-matches automatic photos against changed entry ranges', () => {
     const result = resolvePhotoMatches(
       [

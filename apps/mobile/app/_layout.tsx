@@ -40,6 +40,7 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
               <Stack.Screen name="categories" />
+              <Stack.Screen name="settings/time-range" />
               <Stack.Screen
                 name="(tabs)"
                 options={{

@@ -1,5 +1,5 @@
 import type { DateString, TimeEntrySource, TimeString, TimestampString } from './index';
-import { validateTimeRange } from './time';
+import { formatDiaryTimeLabel, validateDiaryTimeRange } from './time';
 
 export const UTF8_BOM = '\uFEFF';
 
@@ -52,16 +52,23 @@ function compareTimeEntryCsvInput(a: TimeEntryCsvInput, b: TimeEntryCsvInput): n
   return a.startTime.localeCompare(b.startTime);
 }
 
-function getTimeEntryCsvValue(entry: TimeEntryCsvInput, header: TimeEntryCsvHeader): string | number {
+function getTimeEntryCsvValue(
+  entry: TimeEntryCsvInput,
+  header: TimeEntryCsvHeader,
+): string | number {
   if (header === 'durationMinutes') {
     return calculateDurationMinutes(entry);
+  }
+
+  if (header === 'startTime' || header === 'endTime') {
+    return formatDiaryTimeLabel(entry[header]);
   }
 
   return entry[header];
 }
 
 function calculateDurationMinutes(entry: TimeEntryCsvInput): number {
-  const validation = validateTimeRange(entry.startTime, entry.endTime);
+  const validation = validateDiaryTimeRange(entry.startTime, entry.endTime);
 
   if (!validation.isValid) {
     throw new Error(

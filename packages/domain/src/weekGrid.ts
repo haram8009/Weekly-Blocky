@@ -1,5 +1,5 @@
 import type { DateString, TimeString } from './index';
-import { formatMinutesToTime, getDatesOfWeek, validateTimeRange } from './time';
+import { formatDiaryMinutesToTime, getDatesOfWeek, validateDiaryTimeRange } from './time';
 
 export const WEEK_GRID_SLOT_MINUTES = 10;
 export const DEFAULT_WEEK_GRID_START_TIME = '05:00';
@@ -37,6 +37,8 @@ export type WeekGrid = {
 export type BuildWeekGridOptions = {
   weekStartDate: DateString;
   useFullDayView?: boolean;
+  visibleStartTime?: TimeString;
+  visibleEndTime?: TimeString;
 };
 
 export type WeekGridTimeRangeSelection = {
@@ -51,11 +53,15 @@ export type WeekGridTimeRangeSelection = {
 export function buildWeekGrid({
   weekStartDate,
   useFullDayView = false,
+  visibleStartTime: customVisibleStartTime,
+  visibleEndTime: customVisibleEndTime,
 }: BuildWeekGridOptions): WeekGrid {
   const visibleStartTime = useFullDayView
     ? FULL_DAY_WEEK_GRID_START_TIME
-    : DEFAULT_WEEK_GRID_START_TIME;
-  const visibleEndTime = useFullDayView ? FULL_DAY_WEEK_GRID_END_TIME : DEFAULT_WEEK_GRID_END_TIME;
+    : (customVisibleStartTime ?? DEFAULT_WEEK_GRID_START_TIME);
+  const visibleEndTime = useFullDayView
+    ? FULL_DAY_WEEK_GRID_END_TIME
+    : (customVisibleEndTime ?? DEFAULT_WEEK_GRID_END_TIME);
   const range = parseWeekGridRange(visibleStartTime, visibleEndTime);
   const dates = getDatesOfWeek(weekStartDate);
   const blocksPerDay = (range.endMinutes - range.startMinutes) / WEEK_GRID_SLOT_MINUTES;
@@ -117,7 +123,7 @@ function parseWeekGridRange(
   startMinutes: number;
   endMinutes: number;
 } {
-  const validation = validateTimeRange(startTime, endTime);
+  const validation = validateDiaryTimeRange(startTime, endTime);
 
   if (!validation.isValid) {
     throw new Error(
@@ -140,8 +146,8 @@ function buildDayBlocks(
   const blocks: WeekGridBlock[] = [];
 
   for (let minutes = startMinutes; minutes < endMinutes; minutes += WEEK_GRID_SLOT_MINUTES) {
-    const startTime = formatMinutesToTime(minutes);
-    const endTime = formatMinutesToTime(minutes + WEEK_GRID_SLOT_MINUTES);
+    const startTime = formatDiaryMinutesToTime(minutes);
+    const endTime = formatDiaryMinutesToTime(minutes + WEEK_GRID_SLOT_MINUTES);
 
     blocks.push({
       id: `${date}:${startTime}`,

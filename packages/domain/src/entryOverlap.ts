@@ -1,5 +1,5 @@
 import type { DateString, EntityId, TimeString, TimestampString } from './index';
-import { formatMinutesToTime, validateTimeRange } from './time';
+import { formatDiaryMinutesToTime, validateDiaryTimeRange } from './time';
 
 export type EntryOverlapEntry = {
   id: EntityId;
@@ -109,7 +109,7 @@ function parseValidRange(entry: IncomingEntryRange): {
   startMinutes: number;
   endMinutes: number;
 } {
-  const validation = validateTimeRange(entry.startTime, entry.endTime);
+  const validation = validateDiaryTimeRange(entry.startTime, entry.endTime);
 
   if (!validation.isValid) {
     throw new Error(
@@ -143,7 +143,7 @@ function createPatch(startMinutes: number, endMinutes: number): EntryOverlapTime
   }
 
   return {
-    startTime: formatMinutesToTime(startMinutes),
-    endTime: formatMinutesToTime(endMinutes),
+    startTime: formatDiaryMinutesToTime(startMinutes),
+    endTime: formatDiaryMinutesToTime(endMinutes),
   };
 }

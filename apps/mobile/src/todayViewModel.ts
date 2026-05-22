@@ -1,8 +1,13 @@
 import {
+  addDaysToDate,
+  createDisplayTimeEntry,
+  getDatesOfWeek,
   getWeekStartDate,
-  parseTimeToMinutes,
+  formatDiaryTimeLabel,
+  parseDiaryTimeToMinutes,
   type Category,
   type DateString,
+  type TimeString,
   type TimeEntry,
 } from '@weekly/domain';
 
@@ -35,6 +40,27 @@ export type DailySummaryTotal = {
   ratio: number;
 };
 
+export type CalendarDateItem = {
+  date: DateString;
+  dayNumber: string;
+  isCurrentMonth: boolean;
+  isSelected: boolean;
+  isToday: boolean;
+};
+
+export type CalendarMonth = {
+  monthLabel: string;
+  weeks: CalendarDateItem[][];
+};
+
+export type WeekDateItem = {
+  date: DateString;
+  weekdayLabel: string;
+  dayNumber: string;
+  isSelected: boolean;
+  isToday: boolean;
+};
+
 type CategoryLike = Pick<Category, 'id' | 'name' | 'emoji' | 'color'>;
 type CategoryPaletteCategoryLike = Pick<
   Category,
@@ -43,6 +69,10 @@ type CategoryPaletteCategoryLike = Pick<
 type TimeEntryLike = Pick<
   TimeEntry,
   'id' | 'startTime' | 'endTime' | 'categoryId' | 'note' | 'deletedAt'
+>;
+type DisplayDateTimeEntryLike = Pick<
+  TimeEntry,
+  'id' | 'date' | 'startTime' | 'endTime' | 'categoryId' | 'note' | 'deletedAt'
 >;
 type CategoryPaletteEntryLike = Pick<
   TimeEntry,
@@ -55,6 +85,9 @@ const FALLBACK_CATEGORY = {
   emoji: '•',
   color: '#64748B',
 };
+const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'] as const;
+const CALENDAR_WEEK_COUNT = 6;
+const DAYS_PER_WEEK = 7;
 
 export function isValidDateString(value: string | null | undefined): value is DateString {
   if (!value) {
@@ -78,6 +111,78 @@ export function resolveSelectedDate(
   return isValidDateString(candidate) ? candidate : fallbackDate;
 }
 
+export function createCalendarMonth({
+  visibleMonthDate,
+  selectedDate,
+  todayDate,
+}: {
+  visibleMonthDate: DateString;
+  selectedDate: DateString;
+  todayDate: DateString;
+}): CalendarMonth {
+  const monthStartDate = getMonthStartDate(visibleMonthDate);
+  const calendarStartDate = getWeekStartDate(monthStartDate, 'monday');
+  const visibleMonthKey = monthStartDate.slice(0, 7);
+  const weeks: CalendarDateItem[][] = [];
+
+  for (let weekIndex = 0; weekIndex < CALENDAR_WEEK_COUNT; weekIndex += 1) {
+    const weekItems: CalendarDateItem[] = [];
+
+    for (let dayIndex = 0; dayIndex < DAYS_PER_WEEK; dayIndex += 1) {
+      const date = addDaysToDate(calendarStartDate, weekIndex * DAYS_PER_WEEK + dayIndex);
+
+      weekItems.push({
+        date,
+        dayNumber: formatDayNumber(date),
+        isCurrentMonth: date.startsWith(visibleMonthKey),
+        isSelected: date === selectedDate,
+        isToday: date === todayDate,
+      });
+    }
+
+    weeks.push(weekItems);
+  }
+
+  return {
+    monthLabel: formatYearMonth(monthStartDate),
+    weeks,
+  };
+}
+
+export function createWeekDateItems({
+  selectedDate,
+  todayDate,
+}: {
+  selectedDate: DateString;
+  todayDate: DateString;
+}): WeekDateItem[] {
+  return getDatesOfWeek(getWeekStartDate(selectedDate, 'monday')).map((date, index) => ({
+    date,
+    weekdayLabel: WEEKDAY_LABELS[index] ?? '',
+    dayNumber: formatDayNumber(date),
+    isSelected: date === selectedDate,
+    isToday: date === todayDate,
+  }));
+}
+
+export function createWeekCalendarRows({
+  selectedDate,
+  todayDate,
+}: {
+  selectedDate: DateString;
+  todayDate: DateString;
+}): CalendarDateItem[][] {
+  return [
+    createWeekDateItems({ selectedDate, todayDate }).map((item) => ({
+      date: item.date,
+      dayNumber: item.dayNumber,
+      isCurrentMonth: true,
+      isSelected: item.isSelected,
+      isToday: item.isToday,
+    })),
+  ];
+}
+
 export function createDailyEntryListItems(
   entries: readonly TimeEntryLike[],
   categories: readonly CategoryLike[],
@@ -91,13 +196,63 @@ export function createDailyEntryListItems(
 
       return {
         id: entry.id,
-        timeRangeLabel: `${entry.startTime}-${entry.endTime}`,
+        timeRangeLabel: `${formatDiaryTimeLabel(entry.startTime)}-${formatDiaryTimeLabel(entry.endTime)}`,
         categoryName: category.name,
         categoryEmoji: category.emoji,
         categoryColor: category.color,
         durationMinutes: getEntryDurationMinutes(entry),
         note: entry.note,
       };
+    })
+    .sort((first, second) => first.timeRangeLabel.localeCompare(second.timeRangeLabel));
+}
+
+export function createDisplayDateEntryListItems(
+  entries: readonly DisplayDateTimeEntryLike[],
+  categories: readonly CategoryLike[],
+  {
+    displayDate,
+    visibleStartTime,
+    visibleEndTime,
+  }: {
+    displayDate: DateString;
+    visibleStartTime: TimeString;
+    visibleEndTime: TimeString;
+  },
+): DailyEntryListItem[] {
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
+
+  return entries
+    .flatMap((entry) => {
+      if (entry.deletedAt) {
+        return [];
+      }
+
+      const displayEntry = createDisplayTimeEntry({
+        entry,
+        visibleStartTime,
+        visibleEndTime,
+      });
+
+      if (displayEntry.displayDate !== displayDate) {
+        return [];
+      }
+
+      const category = categoryMap.get(entry.categoryId) ?? FALLBACK_CATEGORY;
+
+      return [
+        {
+          id: entry.id,
+          timeRangeLabel: `${formatDiaryTimeLabel(displayEntry.displayStartTime)}-${formatDiaryTimeLabel(displayEntry.displayEndTime)}`,
+          categoryName: category.name,
+          categoryEmoji: category.emoji,
+          categoryColor: category.color,
+          durationMinutes:
+            parseDiaryTimeToMinutes(displayEntry.displayEndTime) -
+            parseDiaryTimeToMinutes(displayEntry.displayStartTime),
+          note: entry.note,
+        },
+      ];
     })
     .sort((first, second) => first.timeRangeLabel.localeCompare(second.timeRangeLabel));
 }
@@ -230,9 +385,28 @@ export function formatDuration(minutes: number): string {
   return `${hours}시간 ${remainingMinutes}분`;
 }
 
+function getMonthStartDate(date: DateString): DateString {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function formatYearMonth(date: DateString): string {
+  const [yearText, monthText] = date.split('-');
+
+  return `${yearText}년 ${Number(monthText)}월`;
+}
+
+function formatDayNumber(date: DateString): string {
+  const [, , dayText] = date.split('-');
+
+  return String(Number(dayText));
+}
+
 function getEntryDurationMinutes(entry: Pick<TimeEntry, 'startTime' | 'endTime'>): number {
   try {
-    return Math.max(parseTimeToMinutes(entry.endTime) - parseTimeToMinutes(entry.startTime), 0);
+    return Math.max(
+      parseDiaryTimeToMinutes(entry.endTime) - parseDiaryTimeToMinutes(entry.startTime),
+      0,
+    );
   } catch {
     return 0;
   }

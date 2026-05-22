@@ -4,17 +4,25 @@ import { getSupabaseStorageErrorMessage, SupabaseStorageError } from '@weekly/da
 import {
   addDaysToDate,
   buildWeekGrid,
+  createDisplayTimeEntry,
+  DEFAULT_APP_SETTINGS,
+  createReviewChartData,
   createWeeklyStats,
   getWeekStartDate,
+  parseDiaryTimeToMinutes,
+  type AppSettings,
   type Category,
   type DateString,
   type PhotoReference,
+  type TimeString,
+  type ReviewChartDailyBreakdown,
+  type ReviewChartData,
+  type ReviewChartGroup,
   type TimeEntry,
   type WeekGridBlock,
-  type WeekReview,
   type WeeklyStatsTotal,
 } from '@weekly/domain';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from '@/components/AppShell';
 import { createWebTimeEntriesCsv } from '@/lib/timeEntriesCsv';
@@ -23,18 +31,35 @@ import {
   listWebPhotoReferenceCountsByEntryIds,
   listWebPhotoReferencesByWeek,
 } from '@/lib/supabase/photoReferences';
-import { listWebTimeEntries, listWebTimeEntriesByWeek } from '@/lib/supabase/timeEntries';
-import { getWebWeekReviewByWeekStartDate, upsertWebWeekReview } from '@/lib/supabase/weekReviews';
+import {
+  listWebTimeEntries,
+  listWebTimeEntriesByDate,
+  listWebTimeEntriesByWeek,
+} from '@/lib/supabase/timeEntries';
+import { ensureWebDefaultSettings, getWebSettings } from '@/lib/supabase/settings';
 import styles from './page.module.css';
 
 const days = ['월', '화', '수', '목', '금', '토', '일'];
+const LINE_CHART_WIDTH = 320;
+const LINE_CHART_HEIGHT = 180;
+const DONUT_SIZE = 140;
+const DONUT_RADIUS = 54;
+const DONUT_STROKE_WIDTH = 18;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 
 type WeekLoadState = 'idle' | 'loading' | 'ready' | 'error';
-type ReviewLoadState = 'idle' | 'loading' | 'ready' | 'error';
-type ReviewSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type CsvExportState = 'idle' | 'week' | 'all';
 type WeekSummaryMode = 'color' | 'name' | 'emoji';
-type ReviewDraft = Pick<WeekReview, 'summary' | 'wins' | 'problems' | 'nextWeekFocus'>;
+type VisibleGridSettings = Pick<
+  AppSettings,
+  'visibleStartTime' | 'visibleEndTime' | 'useFullDayView'
+>;
+
+const DEFAULT_VISIBLE_GRID_SETTINGS: VisibleGridSettings = {
+  visibleStartTime: DEFAULT_APP_SETTINGS.visibleStartTime,
+  visibleEndTime: DEFAULT_APP_SETTINGS.visibleEndTime,
+  useFullDayView: DEFAULT_APP_SETTINGS.useFullDayView,
+};
 
 export default function WeekPage() {
   const todayDate = getLocalDateString();
@@ -42,25 +67,33 @@ export default function WeekPage() {
     getWeekStartDate(todayDate, 'monday'),
   );
   const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [gridEntries, setGridEntries] = useState<TimeEntry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [photoReferences, setPhotoReferences] = useState<PhotoReference[]>([]);
+  const [visibleGridSettings, setVisibleGridSettings] = useState<VisibleGridSettings>(
+    DEFAULT_VISIBLE_GRID_SETTINGS,
+  );
   const [loadState, setLoadState] = useState<WeekLoadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [summaryMode, setSummaryMode] = useState<WeekSummaryMode>('name');
-  const [weekReview, setWeekReview] = useState<WeekReview | null>(null);
-  const [reviewDraft, setReviewDraft] = useState<ReviewDraft>(() => createEmptyReviewDraft());
-  const [reviewLoadState, setReviewLoadState] = useState<ReviewLoadState>('idle');
-  const [reviewSaveState, setReviewSaveState] = useState<ReviewSaveState>('idle');
-  const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
-  const [reviewSaveErrorMessage, setReviewSaveErrorMessage] = useState<string | null>(null);
+  const [selectedReviewDate, setSelectedReviewDate] =
+    useState<DateString>(visibleWeekStartDate);
   const [csvExportState, setCsvExportState] = useState<CsvExportState>('idle');
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportErrorMessage, setCsvExportErrorMessage] = useState<string | null>(null);
-  const reviewRequestIdRef = useRef(0);
-  const visibleWeekStartDateRef = useRef(visibleWeekStartDate);
+  const visibleGridRange = useMemo(
+    () => getEffectiveVisibleGridRange(visibleGridSettings),
+    [visibleGridSettings],
+  );
   const weekGrid = useMemo(
-    () => buildWeekGrid({ weekStartDate: visibleWeekStartDate }),
-    [visibleWeekStartDate],
+    () =>
+      buildWeekGrid({
+        weekStartDate: visibleWeekStartDate,
+        visibleStartTime: visibleGridRange.visibleStartTime,
+        visibleEndTime: visibleGridRange.visibleEndTime,
+        useFullDayView: visibleGridSettings.useFullDayView,
+      }),
+    [visibleGridRange, visibleGridSettings.useFullDayView, visibleWeekStartDate],
   );
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -89,72 +122,15 @@ export default function WeekPage() {
     ],
   );
   const selectedTotals = getWeeklySummaryTotals(weeklySummary, summaryMode);
-  const latestSavedAtLabel = weekReview ? formatDateTime(weekReview.updatedAt) : '아직 저장 전';
-
-  const loadWeekReview = useCallback((weekStartDate: DateString) => {
-    const requestId = reviewRequestIdRef.current + 1;
-
-    reviewRequestIdRef.current = requestId;
-    setReviewLoadState('loading');
-    setReviewSaveState('idle');
-    setReviewErrorMessage(null);
-    setReviewSaveErrorMessage(null);
-    setWeekReview(null);
-    setReviewDraft(createEmptyReviewDraft());
-
-    getWebWeekReviewByWeekStartDate(weekStartDate)
-      .then((nextReview) => {
-        if (reviewRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        setWeekReview(nextReview);
-        setReviewDraft(createReviewDraft(nextReview));
-        setReviewLoadState('ready');
-      })
-      .catch((error) => {
-        if (reviewRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        setReviewLoadState('error');
-        setReviewErrorMessage(
-          error instanceof Error ? error.message : '주간 회고를 불러오지 못했습니다.',
-        );
-      });
-  }, []);
-
-  const saveWeekReview = useCallback(async () => {
-    const targetWeekStartDate = visibleWeekStartDate;
-
-    setReviewSaveState('saving');
-    setReviewSaveErrorMessage(null);
-
-    try {
-      const nextReview = await upsertWebWeekReview({
-        weekStartDate: targetWeekStartDate,
-        summary: reviewDraft.summary,
-        wins: reviewDraft.wins,
-        problems: reviewDraft.problems,
-        nextWeekFocus: reviewDraft.nextWeekFocus,
-      });
-
-      if (visibleWeekStartDateRef.current !== targetWeekStartDate) {
-        return;
-      }
-
-      setWeekReview(nextReview);
-      setReviewDraft(createReviewDraft(nextReview));
-      setReviewSaveState('saved');
-    } catch (error) {
-      if (visibleWeekStartDateRef.current !== targetWeekStartDate) {
-        return;
-      }
-
-      setReviewSaveState('error');
-      setReviewSaveErrorMessage(getSupabaseStorageErrorMessage(error));
-    }
-  }, [reviewDraft, visibleWeekStartDate]);
+  const reviewChartData = useMemo(
+    () =>
+      createReviewChartData({
+        entries: visibleEntries,
+        categories,
+        weekStartDate: visibleWeekStartDate,
+      }),
+    [categories, visibleEntries, visibleWeekStartDate],
+  );
 
   const exportWeekCsv = useCallback(async () => {
     setCsvExportState('week');
@@ -208,18 +184,6 @@ export default function WeekPage() {
     }
   }, []);
 
-  const handleReviewSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      void saveWeekReview();
-    },
-    [saveWeekReview],
-  );
-
-  useEffect(() => {
-    visibleWeekStartDateRef.current = visibleWeekStartDate;
-  }, [visibleWeekStartDate]);
-
   useEffect(() => {
     let isActive = true;
 
@@ -227,18 +191,42 @@ export default function WeekPage() {
     setErrorMessage(null);
 
     Promise.all([
+      getWebSettings().then((settings) => settings ?? ensureWebDefaultSettings()),
       listWebTimeEntriesByWeek(visibleWeekStartDate),
-      listWebCategories(),
+      listWebCategories({ includeArchived: true }),
       listWebPhotoReferencesByWeek(visibleWeekStartDate),
     ])
-      .then(([nextEntries, nextCategories, nextPhotoReferences]) => {
+      .then(async ([nextSettings, nextEntries, nextCategories, nextPhotoReferences]) => {
+        if (!isActive) {
+          return;
+        }
+
+        const nextVisibleGridRange = getEffectiveVisibleGridRange({
+          visibleStartTime: nextSettings.visibleStartTime,
+          visibleEndTime: nextSettings.visibleEndTime,
+          useFullDayView: nextSettings.useFullDayView,
+        });
+        const nextGridEntries =
+          parseDiaryTimeToMinutes(nextVisibleGridRange.visibleEndTime) > 24 * 60
+            ? [
+                ...nextEntries,
+                ...(await listWebTimeEntriesByDate(addDaysToDate(visibleWeekStartDate, 7))),
+              ]
+            : nextEntries;
+
         if (!isActive) {
           return;
         }
 
         setEntries(nextEntries);
+        setGridEntries(nextGridEntries);
         setCategories(nextCategories);
         setPhotoReferences(nextPhotoReferences);
+        setVisibleGridSettings({
+          visibleStartTime: nextSettings.visibleStartTime,
+          visibleEndTime: nextSettings.visibleEndTime,
+          useFullDayView: nextSettings.useFullDayView,
+        });
         setLoadState('ready');
       })
       .catch((error) => {
@@ -247,6 +235,7 @@ export default function WeekPage() {
         }
 
         setEntries([]);
+        setGridEntries([]);
         setCategories([]);
         setPhotoReferences([]);
         setLoadState('error');
@@ -261,8 +250,8 @@ export default function WeekPage() {
   }, [visibleWeekStartDate]);
 
   useEffect(() => {
-    loadWeekReview(visibleWeekStartDate);
-  }, [loadWeekReview, visibleWeekStartDate]);
+    setSelectedReviewDate(visibleWeekStartDate);
+  }, [visibleWeekStartDate]);
 
   function moveWeek(deltaWeeks: number) {
     setVisibleWeekStartDate((currentDate) => addDaysToDate(currentDate, deltaWeeks * 7));
@@ -270,13 +259,6 @@ export default function WeekPage() {
 
   function moveToCurrentWeek() {
     setVisibleWeekStartDate(getWeekStartDate(getLocalDateString(), 'monday'));
-  }
-
-  function updateReviewDraft(field: keyof ReviewDraft, value: string) {
-    setReviewDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
   }
 
   return (
@@ -330,10 +312,12 @@ export default function WeekPage() {
             {weekGrid.days[0]?.blocks.map((_, slotIndex) => (
               <Row
                 categoryById={categoryById}
-                entries={visibleEntries}
+                entries={gridEntries}
                 key={slotIndex}
                 photoReferencesByEntryId={photoReferencesByEntryId}
                 slotIndex={slotIndex}
+                visibleEndTime={visibleGridRange.visibleEndTime}
+                visibleStartTime={visibleGridRange.visibleStartTime}
                 weekDays={weekGrid.days}
               />
             ))}
@@ -389,6 +373,32 @@ export default function WeekPage() {
               <SummaryTotals totals={selectedTotals} />
             )}
 
+            <section className={styles.reviewChartPanel} aria-labelledby="review-chart-title">
+              <div className={styles.panelHeader}>
+                <h2 id="review-chart-title">회고 차트</h2>
+              </div>
+              {visibleEntries.length === 0 ? (
+                <p>이 주에는 아직 기록된 시간이 없습니다.</p>
+              ) : (
+                <>
+                  <WeeklyRatioLineChart chartData={reviewChartData} />
+                  <WeekdayTabs
+                    days={reviewChartData.dailyBreakdowns}
+                    onSelectDate={setSelectedReviewDate}
+                    selectedDate={selectedReviewDate}
+                  />
+                  <DailyDonutChart
+                    breakdown={
+                      reviewChartData.dailyBreakdowns.find(
+                        (day) => day.date === selectedReviewDate,
+                      ) ?? reviewChartData.dailyBreakdowns[0]
+                    }
+                  />
+                  <ReviewTotalsTable groups={reviewChartData.groups} />
+                </>
+              )}
+            </section>
+
             <section className={styles.exportPanel} aria-labelledby="csv-export-title">
               <div className={styles.panelHeader}>
                 <div>
@@ -426,101 +436,6 @@ export default function WeekPage() {
                 </div>
               ) : null}
             </section>
-
-            <section className={styles.reviewPanel} aria-labelledby="review-title">
-              <div className={styles.panelHeader}>
-                <div>
-                  <h2 id="review-title">회고 메모</h2>
-                  <p>마지막 저장: {latestSavedAtLabel}</p>
-                </div>
-              </div>
-
-              {reviewLoadState === 'idle' || reviewLoadState === 'loading' ? (
-                <p className={styles.statusText}>회고를 불러오고 있습니다.</p>
-              ) : null}
-              {reviewLoadState === 'error' ? (
-                <div className={styles.saveError}>
-                  <p>회고 조회 실패: {reviewErrorMessage}</p>
-                  <button
-                    className={styles.secondaryButton}
-                    type="button"
-                    onClick={() => loadWeekReview(visibleWeekStartDate)}
-                  >
-                    다시 불러오기
-                  </button>
-                </div>
-              ) : null}
-              {reviewLoadState === 'ready' ? (
-                <form className={styles.reviewForm} onSubmit={handleReviewSubmit}>
-                  <label className={styles.formField}>
-                    <span>이번 주 요약</span>
-                    <textarea
-                      rows={3}
-                      value={reviewDraft.summary}
-                      onChange={(event) => updateReviewDraft('summary', event.target.value)}
-                    />
-                  </label>
-                  <label className={styles.formField}>
-                    <span>잘한 점</span>
-                    <textarea
-                      rows={3}
-                      value={reviewDraft.wins}
-                      onChange={(event) => updateReviewDraft('wins', event.target.value)}
-                    />
-                  </label>
-                  <label className={styles.formField}>
-                    <span>아쉬운 점</span>
-                    <textarea
-                      rows={3}
-                      value={reviewDraft.problems}
-                      onChange={(event) => updateReviewDraft('problems', event.target.value)}
-                    />
-                  </label>
-                  <label className={styles.formField}>
-                    <span>다음 주 집중</span>
-                    <textarea
-                      rows={3}
-                      value={reviewDraft.nextWeekFocus}
-                      onChange={(event) => updateReviewDraft('nextWeekFocus', event.target.value)}
-                    />
-                  </label>
-
-                  <div className={styles.formActions}>
-                    <button
-                      className={styles.primaryButton}
-                      disabled={reviewSaveState === 'saving'}
-                      type="submit"
-                    >
-                      {reviewSaveState === 'saving' ? '저장 중' : '저장'}
-                    </button>
-                    {reviewSaveState === 'error' ? (
-                      <button
-                        className={styles.secondaryButton}
-                        type="button"
-                        onClick={() => void saveWeekReview()}
-                      >
-                        재시도
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {reviewSaveState === 'saving' ? (
-                    <p className={styles.saveStatus}>회고를 저장하고 있습니다.</p>
-                  ) : null}
-                  {reviewSaveState === 'saved' ? (
-                    <p className={styles.saveStatus}>
-                      저장되었습니다. 마지막 저장: {latestSavedAtLabel}
-                    </p>
-                  ) : null}
-                  {reviewSaveState === 'error' ? (
-                    <div className={styles.saveError}>
-                      <p>저장 실패: {reviewSaveErrorMessage}</p>
-                      <p>네트워크 상태를 확인한 뒤 다시 시도하세요.</p>
-                    </div>
-                  ) : null}
-                </form>
-              ) : null}
-            </section>
           </aside>
         </section>
       </main>
@@ -533,12 +448,16 @@ function Row({
   entries,
   photoReferencesByEntryId,
   slotIndex,
+  visibleEndTime,
+  visibleStartTime,
   weekDays,
 }: {
   categoryById: Map<string, Category>;
   entries: readonly TimeEntry[];
   photoReferencesByEntryId: ReadonlyMap<string, readonly PhotoReference[]>;
   slotIndex: number;
+  visibleEndTime: TimeString;
+  visibleStartTime: TimeString;
   weekDays: ReturnType<typeof buildWeekGrid>['days'];
 }) {
   const labelBlock = weekDays[0]?.blocks[slotIndex];
@@ -549,10 +468,13 @@ function Row({
       <div className={styles.timeCell}>{showTimeLabel ? labelBlock?.startTime : ''}</div>
       {weekDays.map((day) => {
         const block = day.blocks[slotIndex];
-        const entry = block ? getEntryCoveringBlock(block, entries) : null;
+        const entryMatch = block
+          ? getEntryCoveringBlock(block, entries, visibleStartTime, visibleEndTime)
+          : null;
+        const entry = entryMatch?.entry ?? null;
         const category = entry ? categoryById.get(entry.categoryId) : null;
         const entryPhotoReferences =
-          entry && block?.startTime === entry.startTime
+          entry && block?.startTime === entryMatch?.displayStartTime
             ? (photoReferencesByEntryId.get(entry.id) ?? [])
             : [];
 
@@ -653,18 +575,215 @@ function SummaryTotals({ totals }: { totals: readonly WeeklyStatsTotal[] }) {
   );
 }
 
+function WeeklyRatioLineChart({ chartData }: { chartData: ReviewChartData }) {
+  return (
+    <div className={styles.lineChart}>
+      <h3 className={styles.chartTitle}>주간 색상 그룹 비율</h3>
+      <svg
+        aria-label="요일별 색상 그룹 비율 선 그래프"
+        role="img"
+        viewBox={`0 0 ${LINE_CHART_WIDTH} ${LINE_CHART_HEIGHT}`}
+      >
+        {[0, 50, 100].map((ratio) => {
+          const y = LINE_CHART_HEIGHT - (ratio / 100) * LINE_CHART_HEIGHT;
+
+          return (
+            <polyline
+              key={ratio}
+              points={`0,${y} ${LINE_CHART_WIDTH},${y}`}
+              stroke="#d8e0dc"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {chartData.groups.map((group) => (
+          <polyline
+            fill="none"
+            key={group.key}
+            points={group.dailyPoints
+              .map((point, index) => {
+                const x = (index / 6) * LINE_CHART_WIDTH;
+                const y = LINE_CHART_HEIGHT - (point.ratio / 100) * LINE_CHART_HEIGHT;
+
+                return `${x},${y}`;
+              })
+              .join(' ')}
+            stroke={group.color}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+          />
+        ))}
+      </svg>
+      <div className={styles.chartWeekdays}>
+        {chartData.dailyBreakdowns.map((day) => (
+          <span key={day.date}>{day.weekdayLabel}</span>
+        ))}
+      </div>
+      <ChartLegend groups={chartData.groups} />
+    </div>
+  );
+}
+
+function ChartLegend({ groups }: { groups: readonly ReviewChartGroup[] }) {
+  return (
+    <div className={styles.chartLegend}>
+      {groups.map((group) => (
+        <span className={styles.legendItem} key={group.key}>
+          <span className={styles.legendSwatch} style={{ background: group.color }} />
+          {group.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function WeekdayTabs({
+  days,
+  onSelectDate,
+  selectedDate,
+}: {
+  days: readonly ReviewChartDailyBreakdown[];
+  onSelectDate: (date: DateString) => void;
+  selectedDate: DateString;
+}) {
+  return (
+    <div className={styles.weekdayTabs}>
+      {days.map((day) => (
+        <button
+          aria-pressed={day.date === selectedDate}
+          className={styles.weekdayTab}
+          key={day.date}
+          type="button"
+          onClick={() => onSelectDate(day.date)}
+        >
+          {day.weekdayLabel}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DailyDonutChart({ breakdown }: { breakdown: ReviewChartDailyBreakdown | undefined }) {
+  let accumulatedRatio = 0;
+  const segments = breakdown?.segments ?? [];
+
+  return (
+    <div className={styles.dailyBreakdown}>
+      <div className={styles.donutChart}>
+        <svg aria-label="선택 요일 색상 그룹 점유율 도넛 차트" role="img" viewBox="0 0 140 140">
+          <circle
+            cx="70"
+            cy="70"
+            fill="none"
+            r={DONUT_RADIUS}
+            stroke="#d8e0dc"
+            strokeWidth={DONUT_STROKE_WIDTH}
+          />
+          {segments.map((segment) => {
+            const dashLength = (segment.ratio / 100) * DONUT_CIRCUMFERENCE;
+            const rotation = -90 + accumulatedRatio * 3.6;
+
+            accumulatedRatio += segment.ratio;
+
+            return (
+              <circle
+                cx="70"
+                cy="70"
+                fill="none"
+                key={segment.key}
+                r={DONUT_RADIUS}
+                stroke={segment.color}
+                strokeDasharray={`${dashLength} ${DONUT_CIRCUMFERENCE - dashLength}`}
+                strokeLinecap="butt"
+                strokeWidth={DONUT_STROKE_WIDTH}
+                transform={`rotate(${rotation} 70 70)`}
+              />
+            );
+          })}
+        </svg>
+        {segments.length === 0 ? <span>기록 없음</span> : null}
+      </div>
+      <div className={styles.segmentList}>
+        {segments.length === 0 ? (
+          <p>선택한 요일에 기록된 시간이 없습니다.</p>
+        ) : (
+          segments.map((segment) => (
+            <div className={styles.segmentRow} key={segment.key}>
+              <span className={styles.legendSwatch} style={{ background: segment.color }} />
+              <strong>{segment.label}</strong>
+              <em>
+                {formatDuration(segment.minutes)}
+                <small>{segment.ratio}%</small>
+              </em>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReviewTotalsTable({ groups }: { groups: readonly ReviewChartGroup[] }) {
+  return (
+    <div className={styles.totalsTable}>
+      {groups.map((group) => (
+        <div className={styles.totalTableRow} key={group.key}>
+          <span className={styles.legendSwatch} style={{ background: group.color }} />
+          <strong>{group.label}</strong>
+          <span>{group.categoryNames.join(', ')}</span>
+          <em>
+            {formatDuration(group.totalMinutes)}
+            <small>{group.ratio}%</small>
+            <small>{group.peakWeekdayLabel ?? '-'}</small>
+          </em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function getEntryCoveringBlock(
   block: WeekGridBlock,
   entries: readonly TimeEntry[],
-): TimeEntry | null {
+  visibleStartTime: TimeString,
+  visibleEndTime: TimeString,
+): { entry: TimeEntry; displayStartTime: TimeString } | null {
   return (
-    entries.find(
-      (entry) =>
-        entry.date === block.date &&
-        entry.startTime <= block.startTime &&
-        entry.endTime >= block.endTime,
-    ) ?? null
+    entries.flatMap((entry) => {
+      if (entry.deletedAt) {
+        return [];
+      }
+
+      const displayEntry = createDisplayTimeEntry({
+        entry,
+        visibleStartTime,
+        visibleEndTime,
+      });
+
+      return displayEntry.displayDate === block.date &&
+        displayEntry.displayStartTime <= block.startTime &&
+        displayEntry.displayEndTime >= block.endTime
+        ? [{ entry, displayStartTime: displayEntry.displayStartTime }]
+        : [];
+    })[0] ?? null
   );
+}
+
+function getEffectiveVisibleGridRange(
+  settings: VisibleGridSettings,
+): Pick<VisibleGridSettings, 'visibleStartTime' | 'visibleEndTime'> {
+  if (settings.useFullDayView) {
+    return {
+      visibleStartTime: '00:00',
+      visibleEndTime: '24:00',
+    };
+  }
+
+  return {
+    visibleStartTime: settings.visibleStartTime,
+    visibleEndTime: settings.visibleEndTime,
+  };
 }
 
 function formatDuration(minutes: number): string {
@@ -684,28 +803,6 @@ function formatDuration(minutes: number): string {
 
 function formatCompactPhotoCount(photoCount: number): string {
   return photoCount > 9 ? '9+' : String(photoCount);
-}
-
-function createEmptyReviewDraft(): ReviewDraft {
-  return {
-    summary: '',
-    wins: '',
-    problems: '',
-    nextWeekFocus: '',
-  };
-}
-
-function createReviewDraft(review: WeekReview | null): ReviewDraft {
-  if (!review) {
-    return createEmptyReviewDraft();
-  }
-
-  return {
-    summary: review.summary,
-    wins: review.wins,
-    problems: review.problems,
-    nextWeekFocus: review.nextWeekFocus,
-  };
 }
 
 function downloadCsv(content: string, fileName: string): void {
@@ -736,23 +833,10 @@ function getCsvExportErrorMessage(error: unknown): string {
   return 'CSV 파일을 만들지 못했습니다. 잠시 후 다시 시도해주세요.';
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date);
-}
-
 function getLocalDateString(date = new Date()): DateString {
   return [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
-  ].join('-');
+  ].join('-') as DateString;
 }

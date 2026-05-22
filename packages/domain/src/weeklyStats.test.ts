@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { createWeeklyStats } from './weeklyStats';
+import {
+  createReviewChartData,
+  createWeeklyStats,
+  type ReviewChartCategoryLike,
+  type ReviewChartEntryLike,
+} from './weeklyStats';
 
 const categories = [
   {
@@ -244,5 +249,123 @@ describe('createWeeklyStats', () => {
         isWaste: false,
       },
     ]);
+  });
+});
+
+describe('createReviewChartData', () => {
+  const reviewCategories: ReviewChartCategoryLike[] = [
+    { id: 'work', name: '업무', emoji: '💼', color: '#2563EB' },
+    { id: 'meeting', name: '회의', emoji: '🗓️', color: '#2563EB' },
+    { id: 'exercise', name: '운동', emoji: '🏃', color: '#16A34A' },
+    { id: 'waste', name: '낭비한 시간', emoji: '🌀', color: '#DC2626' },
+  ];
+  const reviewEntries: ReviewChartEntryLike[] = [
+    { date: '2026-05-18', startTime: '09:00', endTime: '11:00', categoryId: 'work' },
+    { date: '2026-05-18', startTime: '11:00', endTime: '12:00', categoryId: 'meeting' },
+    { date: '2026-05-18', startTime: '19:00', endTime: '20:00', categoryId: 'exercise' },
+    { date: '2026-05-19', startTime: '21:00', endTime: '23:00', categoryId: 'waste' },
+  ];
+
+  it('groups review chart data by category color', () => {
+    const chartData = createReviewChartData({
+      entries: reviewEntries,
+      categories: reviewCategories,
+      weekStartDate: '2026-05-18',
+    });
+
+    expect(chartData.groups[0]).toMatchObject({
+      color: '#2563EB',
+      label: '업무 외 1개',
+      categoryNames: ['업무', '회의'],
+      totalMinutes: 180,
+    });
+    expect(chartData.groups[0]?.dailyPoints[0]).toMatchObject({
+      date: '2026-05-18',
+      minutes: 180,
+      ratio: 75,
+    });
+  });
+
+  it('creates daily donut segments for the selected weekday', () => {
+    const chartData = createReviewChartData({
+      entries: reviewEntries,
+      categories: reviewCategories,
+      weekStartDate: '2026-05-18',
+    });
+
+    expect(chartData.dailyBreakdowns[0]?.segments).toEqual([
+      expect.objectContaining({ color: '#2563EB', minutes: 180, ratio: 75 }),
+      expect.objectContaining({ color: '#16A34A', minutes: 60, ratio: 25 }),
+    ]);
+  });
+
+  it('returns zero ratios for days without entries', () => {
+    const chartData = createReviewChartData({
+      entries: reviewEntries,
+      categories: reviewCategories,
+      weekStartDate: '2026-05-18',
+    });
+
+    expect(chartData.dailyBreakdowns[2]).toMatchObject({
+      date: '2026-05-20',
+      recordedMinutes: 0,
+      segments: [],
+    });
+    expect(chartData.groups[0]?.dailyPoints[2]).toMatchObject({ minutes: 0, ratio: 0 });
+  });
+
+  it('combines groups after the top six into other', () => {
+    const manyCategories = Array.from({ length: 8 }, (_, index) => ({
+      id: `category-${index}`,
+      name: `분류 ${index}`,
+      emoji: '•',
+      color: `#00000${index}`,
+    }));
+    const manyEntries = manyCategories.map((category, index) => ({
+      date: '2026-05-18' as const,
+      startTime: '09:00' as const,
+      endTime: `${String(9 + index + 1).padStart(2, '0')}:00` as const,
+      categoryId: category.id,
+    }));
+
+    const chartData = createReviewChartData({
+      entries: manyEntries,
+      categories: manyCategories,
+      weekStartDate: '2026-05-18',
+      maxGroups: 6,
+    });
+
+    expect(chartData.groups).toHaveLength(7);
+    expect(chartData.groups.at(-1)).toMatchObject({
+      color: '#64748B',
+      label: '기타',
+      categoryNames: ['분류 1', '분류 0'],
+      totalMinutes: 180,
+    });
+  });
+
+  it('keeps archived categories in review chart data', () => {
+    const chartData = createReviewChartData({
+      entries: [
+        {
+          date: '2026-05-18',
+          startTime: '10:00',
+          endTime: '11:00',
+          categoryId: 'archived-rest',
+        },
+      ],
+      categories,
+      weekStartDate: '2026-05-18',
+    });
+
+    expect(chartData.groups[0]).toMatchObject({
+      color: '#64748B',
+      label: '보관 휴식',
+      categoryNames: ['보관 휴식'],
+      totalMinutes: 60,
+      ratio: 100,
+      peakDate: '2026-05-18',
+      peakWeekdayLabel: '월',
+    });
   });
 });

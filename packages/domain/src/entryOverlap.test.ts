@@ -164,4 +164,27 @@ describe('resolveEntryOverlaps', () => {
       ),
     ).toThrow('기록 시간 범위가 올바르지 않습니다');
   });
+
+  it('다음날 새벽까지 이어지는 일지 시간 기록의 겹침을 처리한다', () => {
+    const existingEntry = createEntry({
+      startTime: '23:30',
+      endTime: '24:30',
+    });
+
+    const resolution = resolveEntryOverlaps([existingEntry], {
+      date: '2026-05-08',
+      startTime: '24:00',
+      endTime: '25:00',
+    });
+
+    expect(resolution.updates).toEqual([
+      {
+        entry: existingEntry,
+        patch: {
+          startTime: '23:30',
+          endTime: '24:00',
+        },
+      },
+    ]);
+  });
 });
